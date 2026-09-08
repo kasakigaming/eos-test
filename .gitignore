@@ -1,0 +1,16 @@
+# Build output
+build/
+EOSSDK-Win64-Shipping.dll
+eos-proxy-setup.exe
+
+# MSVC intermediates
+*.obj
+*.exp
+*.lib
+*.res
+*.pdb
+*.ilk
+
+# Written by the installer next to the exe
+eos-proxy-setup.txt
+epic_proxy.log
