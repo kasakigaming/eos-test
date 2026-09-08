@@ -5,6 +5,10 @@
 // renames the original EOSSDK-Win64-Shipping.dll to .yes and drops the proxy
 // in its place. Several games can be done in one go, and folders outside the
 // Steam libraries can be added by hand and are remembered between runs.
+//
+// The proxy alone does not make a game work, so one pick installs it together
+// with a Steam auth backend - see auth.h for that half, and fetch.h for why
+// those backends are downloaded rather than carried in here.
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -12,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #define EOS_DLL      "EOSSDK-Win64-Shipping.dll"
 #define EOS_BAK      "EOSSDK-Win64-Shipping.yes"
@@ -124,19 +129,20 @@ static BOOL GetFileSize64(const char* path, ULONGLONG* out) {
     return TRUE;
 }
 
+// Kept around for the "retry as admin" offer, and set by auth.h as well.
+static DWORD g_lastError = 0;
+
+// The Steam auth backends. Needs the utilities above and g_lastError.
+#include "auth.h"
+
 // ------------------------------------------------------- embedded proxy DLL
 
 static const unsigned char* g_proxy = NULL;
 static DWORD g_proxyLen = 0;
 
 static BOOL LoadEmbeddedProxy(void) {
-    HRSRC res = FindResourceA(NULL, "PROXYDLL", RT_RCDATA);
-    if (!res) return FALSE;
-    HGLOBAL h = LoadResource(NULL, res);
-    if (!h) return FALSE;
-    g_proxy = (const unsigned char*)LockResource(h);
-    g_proxyLen = SizeofResource(NULL, res);
-    return g_proxy != NULL && g_proxyLen > 0;
+    g_proxy = LoadRes("PROXYDLL", &g_proxyLen);
+    return g_proxy != NULL;
 }
 
 static DWORD WriteProxyTo(const char* path) {
@@ -239,8 +245,6 @@ static const char* StatusText(Status s) {
 }
 
 // ------------------------------------------------------------ install logic
-
-static DWORD g_lastError = 0;   // kept around for the "retry as admin" offer
 
 static BOOL Install(const char* folder) {
     char dll[PATHBUF], bak[PATHBUF];
@@ -638,12 +642,16 @@ static BOOL IsElevated(void) {
 }
 
 // Re-runs this exe as admin for every folder that hit a permissions wall.
-static void RelaunchElevated(const char* verb, char folders[][PATHBUF], int count) {
+static void RelaunchElevated(const char* verb, const char* appid,
+                             char folders[][PATHBUF], int count) {
     char exe[PATHBUF];
     if (!GetModuleFileNameA(NULL, exe, sizeof(exe))) return;
 
     char params[4096];
-    _snprintf_s(params, sizeof(params), _TRUNCATE, "%s", verb);
+    if (appid && appid[0])
+        _snprintf_s(params, sizeof(params), _TRUNCATE, "%s --appid %s", verb, appid);
+    else
+        _snprintf_s(params, sizeof(params), _TRUNCATE, "%s", verb);
     for (int i = 0; i < count; i++) {
         char one[PATHBUF + 4];
         _snprintf_s(one, sizeof(one), _TRUNCATE, " \"%s\"", folders[i]);
@@ -675,24 +683,131 @@ static void RelaunchElevated(const char* verb, char folders[][PATHBUF], int coun
 
 // ------------------------------------------------------------- batch runner
 
-static void PrintReminder(void) {
-    printf("\n"
-        "  Reminder: most games also need ISteamUser::GetAuthTicketForWebApi to\n"
-        "  succeed before they touch EOS networking. Use one of:\n"
-        "    - uc-online2        https://github.com/UnionCrax-Team/uc-online2\n"
-        "    - gbe_fork          https://github.com/Detanup01/gbe_fork\n"
-        "    - SLSsteam (Linux)  https://github.com/AceSLS/SLSsteam\n"
-        "  If something goes wrong, read epic_proxy.log next to the game exe.\n");
+// Everything the installer can do to a folder. One enum so the batch runner,
+// the menu and the elevated relaunch all talk about the same set of verbs.
+typedef enum {
+    ACT_SETUP = 0,       // proxy DLL and an auth backend, the whole job
+    ACT_INSTALL,         // proxy DLL only
+    ACT_UNINSTALL,       // proxy DLL and anything installed under it, out
+    ACT_GBE,             // auth backend in
+    ACT_UC,
+    ACT_SLS,
+    ACT_AUTH_REMOVE      // auth backend out
+} Action;
+
+// Which backend the whole-job action installs. Asked once per run in the menu,
+// set by --gbe/--uc/--sls on the command line.
+static AuthBackend g_setupBackend = AUTH_GBE;
+static BOOL        g_setupBackendChosen = FALSE;
+
+static const char* ActionVerb(Action a) {
+    switch (a) {
+    case ACT_UNINSTALL:   return "--uninstall";
+    case ACT_INSTALL:     return "--proxy-only";
+    case ACT_GBE:         return "--gbe";
+    case ACT_UC:          return "--uc";
+    case ACT_SLS:         return "--sls";
+    case ACT_AUTH_REMOVE: return "--remove-auth";
+    default:              return "--install";
+    }
 }
 
-// Runs one verb over many folders, then offers a single elevated retry for the
-// ones that were refused for lack of rights.
-static void RunBatch(BOOL remove, char folders[][PATHBUF], int count, BOOL askAdmin) {
+static const char* ActionTitle(Action a) {
+    switch (a) {
+    case ACT_UNINSTALL:   return "Removing everything from";
+    case ACT_INSTALL:     return "Installing the proxy into";
+    case ACT_GBE:         return "Installing gbe_fork into";
+    case ACT_UC:          return "Installing uc-online2 into";
+    case ACT_SLS:         return "Writing the SLSsteam config for";
+    case ACT_AUTH_REMOVE: return "Removing the auth backend from";
+    default:              return "Setting up";
+    }
+}
+
+static BOOL RunOne(Action a, const char* folder, const char* appid) {
+    switch (a) {
+    case ACT_INSTALL:     return Install(folder);
+    case ACT_GBE:         return AuthInstall(folder, AUTH_GBE, appid);
+    case ACT_UC:          return AuthInstall(folder, AUTH_UC, appid);
+    case ACT_SLS:         return AuthInstall(folder, AUTH_SLS, appid);
+    case ACT_AUTH_REMOVE: return AuthRemove(folder);
+
+    // Removal goes in the opposite order to installation: the backend first,
+    // so its .eosbak files go back before the proxy's do.
+    case ACT_UNINSTALL: {
+        BOOL auth = AuthRemove(folder);
+        BOOL prox = Uninstall(folder);
+        return auth && prox;
+    }
+
+    // The whole job. A game with the proxy but no ticket underneath is the most
+    // common way for this to look installed and still not work, so one action
+    // does both and is what the menu and drag and drop use.
+    default: {
+        if (!Install(folder)) return FALSE;
+        return AuthInstall(folder, g_setupBackend, appid);
+    }
+    }
+}
+
+// Asks once which backend the whole-job action should use, then remembers it.
+static void ChooseBackend(void) {
+    if (g_setupBackendChosen) return;
+
+    printf("\n  Which Steam auth backend? The proxy needs one of these underneath\n"
+             "  it before a game will touch EOS networking.\n\n");
+    for (int i = 0; i < AUTH_COUNT; i++) {
+        const char* note = (i == AUTH_SLS)      ? "Linux only, writes the config here"
+                         : AuthAvailable((AuthBackend)i) ? "downloaded from the project on first use"
+                         : "not available in this build";
+        printf("    [%d] %-11s %s\n", i + 1, g_authInfo[i].label, note);
+    }
+    printf("\n  [1] > ");
+
+    char line[64];
+    if (fgets(line, sizeof(line), stdin)) {
+        Trim(line);
+        int pick = atoi(line);
+        if (pick >= 1 && pick <= AUTH_COUNT) g_setupBackend = (AuthBackend)(pick - 1);
+    }
+    g_setupBackendChosen = TRUE;
+    printf("  -> %s\n", g_authInfo[g_setupBackend].label);
+}
+
+// The proxy is only half the job, so say so - but only for the folders that
+// still have nothing underneath it.
+static void PrintReminder(char folders[][PATHBUF], int count) {
+    int missing = 0;
+    for (int i = 0; i < count; i++)
+        if (_stricmp(AuthStatusText(folders[i]), "none") == 0) missing++;
+    if (!missing) return;
+
+    printf("\n"
+        "  %d of those folder(s) have no Steam auth backend yet. Most games only\n"
+        "  reach the EOS networking calls once ISteamUser::GetAuthTicketForWebApi\n"
+        "  returns a ticket, which needs one of:\n", missing);
+    for (int i = 0; i < AUTH_COUNT; i++) {
+        const char* state = (i == AUTH_SLS)               ? "Linux only, config written here"
+                          : AuthAvailable((AuthBackend)i) ? "downloaded on first use"
+                                                          : "not available in this build";
+        printf("    %-12s %-32s %s\n", g_authInfo[i].label, state, g_authInfo[i].url);
+    }
+    printf("  Install one from the menu (g/o/s) or with --gbe / --uc / --sls.\n"
+           "  If something goes wrong, read epic_proxy.log next to the game exe.\n");
+}
+
+// Runs one action over many folders, then offers a single elevated retry for
+// the ones that were refused for lack of rights.
+static void RunBatch(Action a, char folders[][PATHBUF], int count, BOOL askAdmin,
+                     const char* appid) {
     static char denied[MAX_TARGETS][PATHBUF];
     int ok = 0, failed = 0, deniedCount = 0;
 
     for (int i = 0; i < count; i++) {
-        if (remove ? Uninstall(folders[i]) : Install(folders[i])) {
+        // Install and Uninstall print the folder with their own status line.
+        if (a != ACT_SETUP && a != ACT_INSTALL && a != ACT_UNINSTALL)
+            printf("\n  %s\n", folders[i]);
+        if (RunOne(a, folders[i], appid)) {
             ok++;
         } else {
             failed++;
@@ -707,14 +822,23 @@ static void RunBatch(BOOL remove, char folders[][PATHBUF], int count, BOOL askAd
         if (askAdmin) {
             printf("\n  %d folder(s) need administrator rights. Retry as admin? [y/N] ", deniedCount);
             char line[16];
-            if (fgets(line, sizeof(line), stdin) && (line[0] == 'y' || line[0] == 'Y'))
-                RelaunchElevated(remove ? "--uninstall" : "--install", denied, deniedCount);
+            if (fgets(line, sizeof(line), stdin) && (line[0] == 'y' || line[0] == 'Y')) {
+                // The backend choice has to survive the relaunch, or the
+                // elevated run would quietly fall back to the default.
+                char verb[64];
+                if (a == ACT_SETUP)
+                    _snprintf_s(verb, sizeof(verb), _TRUNCATE, "--install --%s",
+                                g_authInfo[g_setupBackend].flag);
+                else
+                    _snprintf_s(verb, sizeof(verb), _TRUNCATE, "%s", ActionVerb(a));
+                RelaunchElevated(verb, appid, denied, deniedCount);
+            }
         } else {
             printf("  (run as administrator to fix the %d access denied folder(s))\n", deniedCount);
         }
     }
 
-    if (!remove && ok) PrintReminder();
+    if (a == ACT_INSTALL && ok) PrintReminder(folders, count);
 }
 
 // -------------------------------------------------------------------- shell
@@ -765,7 +889,8 @@ static void ListTargets(void) {
     printf("\n  Found %d folder(s) with the EOS SDK:\n\n", g_targetCount);
     for (int i = 0; i < g_targetCount; i++) {
         Status st = GetStatus(g_targets[i].path);
-        printf("   [%d] %-34.34s  %s\n", i + 1, g_targets[i].name, StatusText(st));
+        printf("   [%d] %-34.34s  proxy: %s\n", i + 1, g_targets[i].name, StatusText(st));
+        printf("       %-34.34s  auth:  %s\n", "", AuthStatusText(g_targets[i].path));
         printf("       %s\n", g_targets[i].path);
     }
     if (g_rootCount) {
@@ -822,10 +947,14 @@ static void Interactive(void) {
         else
             ListTargets();
 
-        printf("\n  install : 1   or  1,3,5   or  2-4   or  a  (all)\n"
-                 "  remove  : u1  or  u1,3    or  ua\n"
+        printf("\n  set up  : 1   or  1,3,5   or  2-4   or  a  (all)   proxy + auth, all of it\n"
+                 "  undo    : u1  or  ua                              back to stock\n"
+                 "  parts   : p1 proxy only     g1 gbe_fork%s   o1 uc-online2%s\n"
+                 "            s1 SLSsteam config          ug1 auth backend only, out\n"
                  "  m add a folder to search    c clear saved folders\n"
-                 "  r rescan                    q quit\n  > ");
+                 "  r rescan                    q quit\n  > ",
+               AuthAvailable(AUTH_GBE) ? "" : " (n/a)",
+               AuthAvailable(AUTH_UC)  ? "" : " (n/a)");
 
         char line[PATHBUF];
         if (!fgets(line, sizeof(line), stdin)) return;
@@ -849,12 +978,33 @@ static void Interactive(void) {
             continue;
         }
 
-        BOOL remove = (line[0] == 'u' || line[0] == 'U');
-        int n = PickTargets(remove ? line + 1 : line, picked, MAX_TARGETS);
+        // u prefixes a removal, and the letter after it picks what to remove:
+        // "u1" the proxy, "ug1" whatever auth backend is there.
+        // A bare number is the whole job. A letter in front narrows it to one
+        // part, and a leading u undoes rather than installs.
+        const char* sel = line;
+        Action act = ACT_SETUP;
+        if (*sel == 'u' || *sel == 'U') {
+            sel++;
+            act = ACT_UNINSTALL;
+            char what = (char)tolower((unsigned char)*sel);
+            if (what == 'g' || what == 'o' || what == 's') { sel++; act = ACT_AUTH_REMOVE; }
+        } else {
+            switch (tolower((unsigned char)*sel)) {
+            case 'p': sel++; act = ACT_INSTALL; break;
+            case 'g': sel++; act = ACT_GBE;     break;
+            case 'o': sel++; act = ACT_UC;      break;
+            case 's': sel++; act = ACT_SLS;     break;
+            }
+        }
+
+        int n = PickTargets(sel, picked, MAX_TARGETS);
         if (n == 0) { printf("  X  nothing selected.\n"); continue; }
 
-        printf("\n  %s %d folder(s)...\n", remove ? "Removing from" : "Installing into", n);
-        RunBatch(remove, picked, n, TRUE);
+        if (act == ACT_SETUP) ChooseBackend();
+
+        printf("\n  %s %d folder(s)...\n", ActionTitle(act), n);
+        RunBatch(act, picked, n, TRUE, NULL);
     }
 }
 
@@ -862,16 +1012,57 @@ static void Usage(void) {
     printf(
         "\n  Usage:\n"
         "    setup.exe                             interactive, scans Steam libraries\n"
-        "    setup.exe <folder> [<folder> ...]     install into those folders\n"
+        "    setup.exe <folder> [<folder> ...]     set up those folders completely\n"
         "    setup.exe --install <folder>...       same, no confirmation\n"
-        "    setup.exe --uninstall <folder>...     restore the original DLL\n"
+        "    setup.exe --all                       set up every game found\n"
+        "    setup.exe --uninstall <folder>...     put everything back to stock\n"
         "    setup.exe --status <folder>...        report what is installed\n"
-        "    setup.exe --all                       install into every game found\n"
         "    setup.exe --extract <file>            just write the proxy DLL somewhere\n"
-        "    --yes    do not ask for confirmation\n"
+        "\n  Setting up installs the proxy and one Steam auth backend, because a\n"
+        "  game needs both. gbe_fork unless one of these says otherwise:\n"
+        "    --gbe / --uc / --sls    pick the backend, or install only that one\n"
+        "    --proxy-only            the proxy DLL and nothing else\n"
+        "    --remove-auth           take the backend out, leave the proxy\n"
+        "    --appid <number>        which game it is, when it cannot be worked out\n"
+        "\n  The emulator is downloaded from the project's own GitHub release the\n"
+        "  first time it is needed and cached in %%LOCALAPPDATA%%\\eos-proxy.\n"
+        "%s%s"
+        "\n    --yes    do not ask for confirmation\n"
         "    --pause  keep the window open when done\n"
         "\n  Folders added with 'm' are remembered in %s next to this exe.\n"
-        "  A folder can be one game or a parent holding several.\n", CONFIG_NAME);
+        "  A folder can be one game or a parent holding several.\n",
+        AuthAvailable(AUTH_GBE) ? "" : "    ! gbe_fork is not available in this build\n",
+        AuthAvailable(AUTH_UC)  ? "" : "    ! uc-online2 is not available in this build\n",
+        CONFIG_NAME);
+}
+
+// Maps a command line verb to an action. Returns FALSE for verbs handled
+// elsewhere (--status, --extract, --all) and for anything unknown.
+static BOOL VerbToAction(const char* verb, Action* out) {
+    static const struct { const char* verb; Action act; } map[] = {
+        { "--install",     ACT_SETUP       },
+        { "--setup",       ACT_SETUP       },
+        { "--proxy-only",  ACT_INSTALL     },
+        { "--uninstall",   ACT_UNINSTALL   },
+        { "--gbe",         ACT_GBE         },
+        { "--uc",          ACT_UC          },
+        { "--sls",         ACT_SLS         },
+        { "--remove-auth", ACT_AUTH_REMOVE },
+    };
+    for (int i = 0; i < (int)(sizeof(map) / sizeof(map[0])); i++)
+        if (_stricmp(verb, map[i].verb) == 0) { *out = map[i].act; return TRUE; }
+    return FALSE;
+}
+
+// --gbe on its own installs just that backend, but alongside --install or
+// --all it is picking which backend the whole job uses.
+static void ApplyBackendChoice(Action act) {
+    switch (act) {
+    case ACT_GBE: g_setupBackend = AUTH_GBE; g_setupBackendChosen = TRUE; break;
+    case ACT_UC:  g_setupBackend = AUTH_UC;  g_setupBackendChosen = TRUE; break;
+    case ACT_SLS: g_setupBackend = AUTH_SLS; g_setupBackendChosen = TRUE; break;
+    default: break;
+    }
 }
 
 // Launched from Explorer (double click or drag and drop) the console dies with
@@ -890,20 +1081,44 @@ int main(int argc, char** argv) {
         printf("\n  X  FATAL: this exe was built without the embedded proxy DLL.\n");
         return 2;
     }
-    printf("  embedded proxy: %lu bytes\n", g_proxyLen);
+    AuthLoadPayloads();
+
+    printf("  embedded proxy: %lu bytes | backends:", g_proxyLen);
+    for (int i = 0; i < AUTH_COUNT; i++)
+        if (AuthAvailable((AuthBackend)i)) printf(" %s", g_authInfo[i].label);
+    printf("\n");
 
     const char* verb = NULL;
+    const char* backendFlag = NULL;
+    const char* appid = NULL;
     static char folders[MAX_TARGETS][PATHBUF];
     int folderCount = 0;
     BOOL pause = OwnsConsole();
     BOOL assumeYes = FALSE;
+    BOOL wantAll = FALSE;
 
     for (int i = 1; i < argc; i++) {
         if (_stricmp(argv[i], "--pause") == 0) { pause = TRUE; continue; }
         if (_stricmp(argv[i], "--yes") == 0 || _stricmp(argv[i], "-y") == 0) { assumeYes = TRUE; continue; }
+        if (_stricmp(argv[i], "--all") == 0) { wantAll = TRUE; continue; }
         if (_stricmp(argv[i], "--help") == 0 || _stricmp(argv[i], "-h") == 0 ||
             _stricmp(argv[i], "/?") == 0) { Usage(); return 0; }
-        if (argv[i][0] == '-') { verb = argv[i]; continue; }
+        if (_stricmp(argv[i], "--appid") == 0) {
+            if (i + 1 < argc) appid = argv[++i];
+            else { printf("\n  X  --appid needs a number after it.\n"); return 1; }
+            continue;
+        }
+        if (argv[i][0] == '-') {
+            // A backend flag is kept apart: on its own it is the action, and
+            // next to --install or --all it only says which backend to use.
+            Action pick;
+            if (VerbToAction(argv[i], &pick) &&
+                (pick == ACT_GBE || pick == ACT_UC || pick == ACT_SLS))
+                backendFlag = argv[i];
+            else
+                verb = argv[i];
+            continue;
+        }
         if (folderCount < MAX_TARGETS) {
             _snprintf_s(folders[folderCount], PATHBUF, _TRUNCATE, "%s", argv[i]);
             Trim(folders[folderCount]);
@@ -913,7 +1128,16 @@ int main(int argc, char** argv) {
 
     int rc = 0;
     int valid = 0;
-    BOOL remove = FALSE;
+    Action act = ACT_SETUP;
+
+    if (backendFlag) {
+        Action pick;
+        VerbToAction(backendFlag, &pick);
+        ApplyBackendChoice(pick);
+        // Alone it means "just this backend"; with a verb or --all it was only
+        // choosing which backend the whole job installs.
+        if (!verb && !wantAll) verb = backendFlag;
+    }
 
     if (verb && _stricmp(verb, "--extract") == 0) {
         if (folderCount != 1) { Usage(); rc = 1; }
@@ -925,15 +1149,26 @@ int main(int argc, char** argv) {
         goto done;
     }
 
-    if (verb && _stricmp(verb, "--all") == 0) {
+    // --status reports rather than acts, and is handled once the folder list
+    // has been checked, so it is not an action verb.
+    BOOL isStatus = verb && _stricmp(verb, "--status") == 0;
+
+    if (verb && !isStatus && !VerbToAction(verb, &act)) {
+        printf("\n  X  unknown option: %s\n", verb);
+        Usage();
+        rc = 1;
+        goto done;
+    }
+
+    if (wantAll) {
         LoadRoots();
         Rescan();
         folderCount = 0;
         for (int i = 0; i < g_targetCount && folderCount < MAX_TARGETS; i++)
             _snprintf_s(folders[folderCount++], PATHBUF, _TRUNCATE, "%s", g_targets[i].path);
         if (!folderCount) { printf("\n  X  no EOS games found.\n"); rc = 1; goto done; }
-        printf("\n  Installing into all %d folder(s) found.\n", folderCount);
-        RunBatch(FALSE, folders, folderCount, !assumeYes);
+        printf("\n  %s all %d folder(s) found.\n", ActionTitle(act), folderCount);
+        RunBatch(act, folders, folderCount, !assumeYes, appid);
         goto done;
     }
 
@@ -956,24 +1191,24 @@ int main(int argc, char** argv) {
     folderCount = valid;
     if (!folderCount) goto done;
 
-    if (verb && _stricmp(verb, "--status") == 0) {
+    if (isStatus) {
         for (int i = 0; i < folderCount; i++)
-            printf("\n  %s\n  status: %s\n", folders[i], StatusText(GetStatus(folders[i])));
+            printf("\n  %s\n  proxy: %s\n  auth:  %s\n", folders[i],
+                   StatusText(GetStatus(folders[i])), AuthStatusText(folders[i]));
         goto done;
     }
 
-    remove = (verb && _stricmp(verb, "--uninstall") == 0);
-
     // A bare folder list is usually drag and drop, so confirm before writing.
     if (!verb && !assumeYes) {
-        printf("\n  Install the proxy into these %d folder(s)?\n", folderCount);
+        printf("\n  Set up the proxy and %s in these %d folder(s)?\n",
+               g_authInfo[g_setupBackend].label, folderCount);
         for (int i = 0; i < folderCount; i++) printf("    %s\n", folders[i]);
         printf("  [Y/n] ");
         char a[16];
         if (fgets(a, sizeof(a), stdin) && (a[0] == 'n' || a[0] == 'N')) { rc = 1; goto done; }
     }
 
-    RunBatch(remove, folders, folderCount, TRUE);
+    RunBatch(act, folders, folderCount, TRUE, appid);
 
 done:
     if (pause) {

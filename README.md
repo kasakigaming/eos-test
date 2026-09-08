@@ -6,21 +6,28 @@ A stupid simple Epic Online Services "proxy" that enables multiplayer functional
 
 ## The easy way: `eos-proxy-setup.exe`
 
-The installer is a single exe with the proxy DLL baked into it. Run it, pick the games from the list, done.
+The installer is a single exe with the proxy DLL baked into it. Run it, pick the games from the
+list, done - one pick installs the proxy and a Steam auth backend, which is everything a game
+needs.
 
 ```
- [1] The Isle                          not installed
+ [1] The Isle                          proxy: not installed
+                                       auth:  none
      D:\Games\TheIsle\TheIsle\Binaries\Win64
- [2] SpiderHeck                        installed (up to date)
+ [2] SpiderHeck                        proxy: installed (up to date)
+                                       auth:  gbe_fork, app 1329500
      C:\Program Files (x86)\Steam\steamapps\common\SpiderHeck
 
- install : 1   or  1,3,5   or  2-4   or  a  (all)
- remove  : u1  or  u1,3    or  ua
+ set up  : 1   or  1,3,5   or  2-4   or  a  (all)   proxy + auth, all of it
+ undo    : u1  or  ua                              back to stock
+ parts   : p1 proxy only     g1 gbe_fork   o1 uc-online2
+           s1 SLSsteam config          ug1 auth backend only, out
  m add a folder to search    c clear saved folders
  r rescan                    q quit
 ```
 
-- Several games at once: `1,3,5`, a range `2-4`, or `a` for everything found
+- Several games at once: `1,3,5`, a range `2-4`, or `a` for everything found. That applies
+  to the part commands too, so `ga` puts gbe_fork in every game found
 - Steam libraries on every drive are found through the registry key and `libraryfolders.vdf`
 - `m` adds any folder outside Steam. It can be a single game (`D:\Games\TheIsle`) or a
   parent holding several (`D:\Games`), and it is searched 5 levels deep, so a nested
@@ -34,25 +41,84 @@ The installer is a single exe with the proxy DLL baked into it. Run it, pick the
 Command line:
 
 ```
-setup.exe <folder> [<folder> ...]     install into those folders
+setup.exe <folder> [<folder> ...]     set up those folders completely
 setup.exe --install <folder>...       same, no confirmation
-setup.exe --uninstall <folder>...     restore the original DLL
+setup.exe --all                       set up every game found
+setup.exe --uninstall <folder>...     put everything back to stock
 setup.exe --status <folder>...        report what is installed
-setup.exe --all                       install into every game found
 setup.exe --extract <file>            just write the proxy DLL somewhere
+
+--gbe / --uc / --sls                  pick the backend, or install only that one
+--proxy-only                          the proxy DLL and nothing else
+--remove-auth                         take the backend out, leave the proxy
+--appid <number>                      which game it is, when it cannot be worked out
 ```
 
-You still need one of the Steam auth options below.
+So `setup.exe --all --gbe --yes` sets up every EOS game on the machine with gbe_fork under it,
+unattended.
+
+## The Steam auth backend
+
+The proxy is only half the job. Most games **require** `ISteamUser::GetAuthTicketForWebApi` to
+return a non-error response before they even call the EOS networking functions, so one of these
+has to sit underneath it:
+
+| | what it is | the installer |
+|---|---|---|
+| [gbe_fork](https://github.com/Detanup01/gbe_fork/) | runs the game independent of Steam | `g<n>` / `--gbe`, downloaded and configured |
+| [uc-online2](https://github.com/UnionCrax-Team/uc-online2) | very similar to Online-Fix | `o<n>` / `--uc`, downloaded |
+| [SLSsteam](https://github.com/AceSLS/SLSsteam/) | Linux only, shims the real Steam client | `s<n>` / `--sls`, writes the config |
+
+Whichever you pick, all multiplayer is still handled through Epic. Aside from Steam invites being
+incompatible between gbe_fork and the other two, there should be no compatibility issues.
+
+A plain `1` in the menu, or `setup.exe <folder>`, does the proxy and a backend in one go, because
+a game needs both. `p1` / `--proxy-only` if you only want the proxy.
+
+What the installer does for you:
+
+- Downloads the emulator from the project's own GitHub release the first time it is needed, and
+  caches it in `%LOCALAPPDATA%\eos-proxy` so later installs are offline
+- Works out the game's Steam AppID from `steam_appid.txt` or the library's `appmanifest_*.acf`,
+  and fills it into the backend's config. `--appid <number>` when it cannot (a game outside a
+  Steam library, for instance)
+- Fills in your Steam account name and SteamID64 from the registry, so gbe_fork reports the name
+  other players already know you by
+- Parks any file it overwrites as `<name>.eosbak` and records everything it wrote in
+  `eos-proxy-auth.txt` next to the game, so `ug<n>` / `--remove-auth` puts the folder back
+  exactly as it was
+- Only one backend at a time: installing a second one removes the first properly first
+- SLSsteam is Linux only, so there is nothing to copy into a game folder from Windows. What it
+  can do is generate `SLSsteam-config.yaml` with `FakeAppIds` already pointed at the game, ready
+  to be copied to `~/.config/SLSsteam/config.yaml` on the Linux side
+
+## Antivirus
+
+Steam emulators are flagged as riskware by nearly every scanner. It is a false positive, and it
+is also the reason the emulators are **not** baked into `eos-proxy-setup.exe`: an installer
+carrying those bytes gets quarantined before you ever run it.
+
+Downloading them at install time keeps the installer itself clean, but the download can still be
+blocked. Windows Defender does not always delete the file - it often leaves it on disk at full
+size and refuses to let anything open it, which every extractor then reports as a corrupt
+archive. The installer detects that case and prints the exact commands to run. They are:
+
+```powershell
+Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\eos-proxy"
+Add-MpPreference -ExclusionPath "D:\Games\TheIsle\TheIsle\Binaries\Win64"
+```
+
+Run those in an administrator PowerShell, then run the installer again. `Remove-MpPreference`
+with the same arguments undoes it. The installer will never touch your antivirus settings on its
+own.
 
 ## The manual way
 
 - Rename the existing `EOSSDK-Win64-Shipping.dll` in the game folder to `EOSSDK-Win64-Shipping.yes`
 - Download the proxy dll from [releases](https://github.com/yesyes0649/eos-proxy/releases) and put it in the same location
-- Additionally, most games seem to **require** `ISteamUser::GetAuthTicketForWebApi` to return a non-error response before they even call the EOS networking functions. So you will have to use one of the following:
-  - (Linux only) [SLSsteam](https://github.com/AceSLS/SLSsteam/) with [FakeAppIds](https://github.com/AceSLS/SLSsteam/wiki/Configuration#fakeappids-map-of-positive-number--positive-number) configured for the game
-  - [uc-online2](https://github.com/UnionCrax-Team/uc-online2), which provides an experience that is very similar to Online-Fix
-  - If you want to run the game independent of Steam, use [gbe_fork](https://github.com/Detanup01/gbe_fork/)
-- Regardless of which option you choose, you're good to go. All multiplayer is still handled through Epic, so aside from steam invites being incompatible between gbe_fork and the other two, there should be no other compatibility issues
+- Set up one of the three backends above by hand. For SLSsteam that means
+  [FakeAppIds](https://github.com/AceSLS/SLSsteam/wiki/Configuration#fakeappids-map-of-positive-number--positive-number)
+  configured for the game
 - In case of issues, check the `epic_proxy.log` file next to game executable. Feel free to open an issue in GitHub.
 
 # Confirmed Games
@@ -74,7 +140,33 @@ I've only tested this with a few games.
 Run `build.bat`. It locates MSVC through vswhere if you are not already in a developer prompt, and produces:
 
 - `EOSSDK-Win64-Shipping.dll` - the proxy itself
-- `eos-proxy-setup.exe` - the installer, with that DLL embedded as a resource
+- `eos-proxy-setup.exe` - the installer, with that DLL and the auth payloads embedded as resources
+
+## The auth backend payloads
+
+`installer/payload/<backend>/` holds the config that ships inside the exe. `tools/pack.c` packs
+each folder into an archive that `setup.rc` embeds, and the installer writes those files into the
+game folder next to the downloaded emulator.
+
+The emulators themselves are not here and are not downloaded at build time - see
+[Antivirus](#antivirus) for why. Anything you do drop into a payload folder is installed along
+with the download, so it is the place for extra per-game config.
+
+Files whose name starts with `_` are left out of the archive, and any
+`.ini .txt .cfg .yaml .yml .json .xml` file is a template, with these substituted as it is
+written into the game folder:
+
+| | |
+|---|---|
+| `{APPID}` | Steam AppID of the game |
+| `{ACCOUNT_NAME}` | Steam account name, from the registry |
+| `{STEAM_ID}` | SteamID64 |
+| `{GAME_NAME}` | name of the game folder |
+| `{GAME_DIR}` | full path it was installed into |
+
+Where the installer downloads a backend from, and which file it takes out of the archive, is the
+table at the top of `installer/auth.h`. It asks the GitHub API for the latest release rather than
+pinning a version, so it keeps working as those projects publish new builds.
 
 # Disclaimer / Credits
 
@@ -82,3 +174,14 @@ Developers can choose to disable this login option. Therefore this proxy is not 
 
 - Online-Fix for the approach used. Others may have done it but my approach is entirely based on their fixes.
 - Functions for logging (in `common.h`) and fetching Steam ID / persona name (in `steam.h`) are slop (by Claude)
+
+The installer downloads, and does not redistribute, these projects. Each stays under its own
+licence and is fetched from its own release page:
+
+- [gbe_fork](https://github.com/Detanup01/gbe_fork) by Detanup01 and contributors, GPLv3.
+  A fork of Goldberg Emulator
+- [uc-online2](https://github.com/UnionCrax-Team/uc-online2) by the UnionCrax Team
+- [SLSsteam](https://github.com/AceSLS/SLSsteam) by AceSLS. Only its config is generated here
+- [7-Zip](https://www.7-zip.org/) by Igor Pavlov. `7zr.exe`, the public domain standalone
+  extractor, is fetched when an archive needs a 7z reader that Windows' own `tar.exe` cannot
+  provide

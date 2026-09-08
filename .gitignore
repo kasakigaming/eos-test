@@ -14,3 +14,20 @@ eos-proxy-setup.exe
 # Written by the installer next to the exe
 eos-proxy-setup.txt
 epic_proxy.log
+
+# Third party binaries dropped into the auth payload folders. The config
+# templates that sit next to them are ours and stay tracked.
+installer/payload/**/*.dll
+installer/payload/**/*.exe
+installer/payload/**/*.so
+installer/payload/**/*.7z
+installer/payload/**/*.zip
+installer/payload/**/*.rar
+installer/payload/**/*.pak
+
+# Written by the installer next to a game
+eos-proxy-auth.txt
+SLSsteam-config.yaml
+# ...but the template it is generated from is ours. Git matches the rule above
+# case insensitively on Windows, so it needs saying.
+!installer/slssteam-config.yaml

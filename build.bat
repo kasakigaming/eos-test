@@ -19,22 +19,36 @@ if errorlevel 1 goto :nocompiler
 :build
 if not exist build mkdir build
 
-echo [1/3] proxy DLL
+echo [1/5] proxy DLL
 cl /nologo /LD /O2 /EHsc /Fobuild\ src\main.c /link /DLL /OUT:EOSSDK-Win64-Shipping.dll /IMPLIB:build\proxy.lib User32.lib
 if errorlevel 1 goto :fail
 
-echo [2/3] installer resources (embedding the DLL)
-rc /nologo /I . /I installer /fo build\setup.res installer\setup.rc
+echo [2/5] payload packer
+cl /nologo /O2 /Fobuild\ /Fe:build\pack.exe tools\pack.c
 if errorlevel 1 goto :fail
 
-echo [3/3] installer exe
-cl /nologo /O2 /Fobuild\ /Fe:eos-proxy-setup.exe installer\setup.c build\setup.res /link User32.lib Advapi32.lib Shell32.lib
+echo [3/5] auth backend payloads
+rem An empty or missing payload folder is fine: it packs to an empty archive
+rem and the installer reports that backend as not bundled. See the _README.txt
+rem in each folder for which files to drop in.
+build\pack.exe installer\payload\gbe_fork   build\gbe_fork.pak
+if errorlevel 1 goto :fail
+build\pack.exe installer\payload\uc-online2 build\uc-online2.pak
+if errorlevel 1 goto :fail
+
+echo [4/5] installer resources (embedding the DLL and the payloads)
+rc /nologo /I . /I installer /I build /fo build\setup.res installer\setup.rc
+if errorlevel 1 goto :fail
+
+echo [5/5] installer exe
+rem Urlmon/Wininet: downloading a backend release at install time, see fetch.h.
+cl /nologo /O2 /Fobuild\ /Fe:eos-proxy-setup.exe installer\setup.c build\setup.res /link User32.lib Advapi32.lib Shell32.lib Urlmon.lib Wininet.lib
 if errorlevel 1 goto :fail
 
 echo.
 echo Done:
 echo   EOSSDK-Win64-Shipping.dll   proxy, drop it in the game folder by hand
-echo   eos-proxy-setup.exe         installer with the DLL baked in
+echo   eos-proxy-setup.exe         installer with the DLL and payloads baked in
 exit /b 0
 
 :nocompiler

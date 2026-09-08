@@ -4,6 +4,14 @@
 // Found through the include paths passed to rc.exe.
 PROXYDLL RCDATA "EOSSDK-Win64-Shipping.dll"
 
+// The Steam auth backends, packed from installer\payload\<name> by
+// tools\pack.c. build.bat always produces these two, empty when nobody has
+// dropped the third party binaries in yet, and the installer then reports that
+// backend as not bundled. SLSsteam is Linux only so only its config is here.
+GBEFORK  RCDATA "gbe_fork.pak"
+UCONLINE RCDATA "uc-online2.pak"
+SLSCONF  RCDATA "slssteam-config.yaml"
+
 1 RT_MANIFEST "setup.manifest"
 
 VS_VERSION_INFO VERSIONINFO
