@@ -4,6 +4,7 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <winhttp.h>
+#include <ctype.h>
 
 // The Isle's matchmaker, api.warphosting.com.au.
 //
@@ -301,8 +302,28 @@ static void Warp_SendBody(SOCKET s, int status, const char *body, int bodyLen) {
     Warp_Send(s, body, bodyLen);
 }
 
-// Answers a request one line at a time in epic_proxy.log. Response bodies are
-// logged, request bodies are not: those carry the Steam ticket.
+// Copies a request body for the log with the Steam ticket taken out. The
+// ticket is a long run of hex and it is the one thing in here worth not
+// writing to a file; every other field is what the client asked for, which is
+// exactly what we want to see.
+static void Warp_Redact(const char *body, int bodyLen, char *out, int outCap) {
+    int o = 0, i = 0;
+    while (i < bodyLen && o < outCap - 24) {
+        int run = 0;
+        while (i + run < bodyLen && isxdigit((unsigned char) body[i + run])) run++;
+
+        if (run > 32) {
+            o += _snprintf_s(out + o, outCap - o, _TRUNCATE, "<%d hex chars>", run);
+            i += run;
+        } else {
+            out[o++] = body[i++];
+        }
+    }
+    out[o] = '\0';
+}
+
+// Answers a request one line at a time in epic_proxy.log, both what was asked
+// and what came back.
 static void Warp_Serve(SOCKET client) {
     char *req = (char *) malloc(WARP_REQ_MAX);
     char *resp = (char *) malloc(WARP_RESP_MAX);
@@ -350,13 +371,17 @@ static void Warp_Serve(SOCKET client) {
         goto cleanup;
     }
 
+    char asked[WARP_LOG_BODY + 64];
+    Warp_Redact(req + headerEnd, bodyLen, asked, sizeof(asked));
+
     int respLen = 0;
     int status = Warp_Forward(head, req + headerEnd, bodyLen, resp, WARP_RESP_MAX, &respLen);
 
     // %.*S prints a wide string through a narrow format. The answer is logged
     // short: a server list runs to hundreds of kilobytes.
-    LogText("Warp: %.*S %.*S -> %d, %d bytes: %.*s%s",
-            16, head->method, 120, head->path, status, respLen,
+    LogText("Warp: %.*S %.*S  asked %s", 16, head->method, 120, head->path, asked);
+    LogText("Warp:   -> %d, %d bytes: %.*s%s",
+            status, respLen,
             respLen < WARP_LOG_BODY ? respLen : WARP_LOG_BODY, resp,
             respLen > WARP_LOG_BODY ? " ..." : "");
 
