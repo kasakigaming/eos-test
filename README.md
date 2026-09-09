@@ -155,6 +155,33 @@ I've only tested this with a few games.
 - All games that use EOS first call a `EOS_Connect_Login` function to initialize networking features. Since Epic supports a wide variety of platforms, they have many different authentication choices.
 - This proxy just intercepts that function call, and swaps the authentication type from `EOS_ECT_STEAM_SESSION_TICKET` (which requires a valid steam auth ticket) to `EOS_ECT_DEVICEID_ACCESS_TOKEN` (which requires nothing. it's a game-specific and device-specific token.). There is a bit more code to prepare the device id access token, but that's all.
 
+## The Isle: "Official Network Status: Offline"
+
+EOS gets the game online, but The Isle also talks to its own matchmaker at
+`api.warphosting.com.au`, and that is a separate wall. Every call there carries a Steam ticket
+which the matchmaker hands to Valve for validation, and no emulator can produce a ticket Valve
+will sign off on:
+
+| endpoint | ticket | what it is |
+|---|---|---|
+| `POST /v1/servers/community` | not required | the community server list. This is the one that fills the browser, which is why 900-odd servers show up while the status line says the network is down |
+| `POST /v1/servers/status` | required, `401 Steam ticket invalid` | the official network state, `ONLINE` / `OFFLINE` / `UPDATING` / `MAINTENANCE`. The 401 is what paints the menu line red |
+| `POST /v1/servers/active` | required | the official server list |
+| `POST /v1/match/request`, `POST /v1/servers/queue/join` | required | joining and queueing for an official server |
+
+`src\warp.h` deals with the status line only. The URL is a plain ASCII literal in the game
+executable, so the proxy rewrites it in memory to a loopback address it listens on, forwards the
+request to the real matchmaker unchanged, passes the answer straight back whenever there is one,
+and substitutes `ONLINE` only when the matchmaker refuses the ticket. A genuine ticket, and any
+genuine `MAINTENANCE` or `UPDATING` state, still wins.
+
+That is the whole of it, and it is worth being blunt about the limit: **the official servers
+themselves stay out of reach**. Listing them, matchmaking into one and queueing all validate the
+same ticket, and there is no answer to those that can be invented locally. The status line reads
+Online; the Official filter stays empty. Community servers were never affected either way.
+
+`EOS_PROXY_NO_WARP=1` in the environment leaves the game's own request alone.
+
 
 # Building
 

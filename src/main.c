@@ -676,6 +676,7 @@
 
 #include "steam.h"
 #include "common.h"
+#include "warp.h"
 #include <intrin.h>
 
 static HMODULE g_hOrig = NULL;
@@ -863,6 +864,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
             if (g_hLog != INVALID_HANDLE_VALUE)
                 WriteFile(g_hLog, ok, (DWORD)strlen(ok), &written, NULL);
         }
+
+        // Turns The Isle's "Official Network Status" line back to Online. See
+        // warp.h for what it does and what it deliberately leaves alone.
+        Warp_Start();
         break;
 
     case DLL_PROCESS_DETACH:

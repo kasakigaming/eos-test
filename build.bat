@@ -20,7 +20,9 @@ if errorlevel 1 goto :nocompiler
 if not exist build mkdir build
 
 echo [1/5] proxy DLL
-cl /nologo /LD /O2 /EHsc /Fobuild\ src\main.c /link /DLL /OUT:EOSSDK-Win64-Shipping.dll /IMPLIB:build\proxy.lib User32.lib
+rem Ws2_32/Winhttp: the loopback listener that answers the game's official
+rem network status request, see src\warp.h.
+cl /nologo /LD /O2 /EHsc /Fobuild\ src\main.c /link /DLL /OUT:EOSSDK-Win64-Shipping.dll /IMPLIB:build\proxy.lib User32.lib Ws2_32.lib Winhttp.lib
 if errorlevel 1 goto :fail
 
 echo [2/5] payload packer
