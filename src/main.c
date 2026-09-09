@@ -865,8 +865,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
                 WriteFile(g_hLog, ok, (DWORD)strlen(ok), &written, NULL);
         }
 
-        // Turns The Isle's "Official Network Status" line back to Online. See
-        // warp.h for what it does and what it deliberately leaves alone.
+        // Relays The Isle's matchmaker traffic so it can be seen, and turns
+        // the official network status line back to Online. See warp.h for
+        // what it does and what it deliberately leaves alone.
         Warp_Start();
         break;
 
