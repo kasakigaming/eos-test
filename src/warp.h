@@ -322,6 +322,28 @@ static void Warp_Redact(const char *body, int bodyLen, char *out, int outCap) {
     out[o] = '\0';
 }
 
+// Pulls a string value out of a flat JSON body. Enough for the two or three
+// fields wanted here; nothing about these payloads needs a real parser.
+static int Warp_JsonString(const char *body, int len, const char *key,
+                           char *out, int outCap) {
+    char quoted[64];
+    _snprintf_s(quoted, sizeof(quoted), _TRUNCATE, "\"%s\"", key);
+
+    const char *at = Warp_Find(body, len, quoted);
+    if (!at) return 0;
+
+    const char *p = at + strlen(quoted);
+    const char *end = body + len;
+    while (p < end && (*p == ' ' || *p == '\t' || *p == ':')) p++;
+    if (p >= end || *p != '"') return 0;
+    p++;
+
+    int o = 0;
+    while (p < end && *p != '"' && o < outCap - 1) out[o++] = *p++;
+    out[o] = '\0';
+    return o > 0;
+}
+
 // Answers a request one line at a time in epic_proxy.log, both what was asked
 // and what came back.
 static void Warp_Serve(SOCKET client) {
@@ -386,13 +408,41 @@ static void Warp_Serve(SOCKET client) {
             respLen > WARP_LOG_BODY ? " ..." : "");
 
     int isStatusCall = wcsstr(head->path, L"/v1/servers/status") != NULL;
+    int isMatchCall  = wcsstr(head->path, L"/v1/match/request") != NULL;
+    int refused      = status != 200 && status != 202;
+
+    char serverId[80];
 
     if (status == 0) {
         LogText("Warp: matchmaker could not be reached");
         Warp_SendBody(client, 502, "{\"detail\":\"upstream unreachable\"}", 33);
-    } else if (isStatusCall && status != 200) {
+
+    } else if (isStatusCall && refused) {
         LogText("Warp: status call refused, reporting ONLINE instead");
         Warp_SendBody(client, 200, WARP_ONLINE_BODY, (int) strlen(WARP_ONLINE_BODY));
+
+    } else if (isMatchCall && refused &&
+               (Warp_JsonString(req + headerEnd, bodyLen, "server_id", serverId, sizeof(serverId)) ||
+                Warp_JsonString(req + headerEnd, bodyLen, "serverId", serverId, sizeof(serverId)))) {
+        // The client resolves Connect through here, and the answer it wants is
+        // an EOS session id it can look up and join. The matchmaker holds the
+        // mapping from its own server id to that session and will not give it
+        // up without a ticket.
+        //
+        // The guess worth trying: the two are the same string. Both are 32 hex
+        // characters, and the server registers itself with the matchmaker from
+        // the same place it registers the EOS session. Answering with the
+        // server id costs nothing and the session search that follows says
+        // whether it was right - EOS_SessionSearch_SetSessionId in main.c logs
+        // what the client goes looking for and how many results come back.
+        char answer[512];
+        int n = _snprintf_s(answer, sizeof(answer), _TRUNCATE,
+            "{\"server_id\":\"%s\",\"session_id\":\"%s\",\"request_id\":\"%s\","
+            "\"launch_state\":\"running\"}", serverId, serverId, serverId);
+
+        LogText("Warp: match refused, answering with session_id=%s", serverId);
+        Warp_SendBody(client, 202, answer, n);
+
     } else {
         Warp_SendBody(client, status, resp, respLen);
     }

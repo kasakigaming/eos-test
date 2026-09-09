@@ -569,12 +569,12 @@
 #pragma comment(linker, "/export:EOS_SessionModification_SetPermissionLevel=" ORIGINAL_DLL ".EOS_SessionModification_SetPermissionLevel,@573")
 #pragma comment(linker, "/export:EOS_SessionSearch_CopySearchResultByIndex=" ORIGINAL_DLL ".EOS_SessionSearch_CopySearchResultByIndex,@574")
 #pragma comment(linker, "/export:EOS_SessionSearch_Find=" ORIGINAL_DLL ".EOS_SessionSearch_Find,@575")
-#pragma comment(linker, "/export:EOS_SessionSearch_GetSearchResultCount=" ORIGINAL_DLL ".EOS_SessionSearch_GetSearchResultCount,@576")
+// #pragma comment(linker, "/export:EOS_SessionSearch_GetSearchResultCount=" ORIGINAL_DLL ".EOS_SessionSearch_GetSearchResultCount,@576")
 #pragma comment(linker, "/export:EOS_SessionSearch_Release=" ORIGINAL_DLL ".EOS_SessionSearch_Release,@577")
 #pragma comment(linker, "/export:EOS_SessionSearch_RemoveParameter=" ORIGINAL_DLL ".EOS_SessionSearch_RemoveParameter,@578")
 #pragma comment(linker, "/export:EOS_SessionSearch_SetMaxResults=" ORIGINAL_DLL ".EOS_SessionSearch_SetMaxResults,@579")
 #pragma comment(linker, "/export:EOS_SessionSearch_SetParameter=" ORIGINAL_DLL ".EOS_SessionSearch_SetParameter,@580")
-#pragma comment(linker, "/export:EOS_SessionSearch_SetSessionId=" ORIGINAL_DLL ".EOS_SessionSearch_SetSessionId,@581")
+// #pragma comment(linker, "/export:EOS_SessionSearch_SetSessionId=" ORIGINAL_DLL ".EOS_SessionSearch_SetSessionId,@581")
 #pragma comment(linker, "/export:EOS_SessionSearch_SetTargetUserId=" ORIGINAL_DLL ".EOS_SessionSearch_SetTargetUserId,@582")
 #pragma comment(linker, "/export:EOS_Sessions_AddNotifyJoinSessionAccepted=" ORIGINAL_DLL ".EOS_Sessions_AddNotifyJoinSessionAccepted,@583")
 #pragma comment(linker, "/export:EOS_Sessions_AddNotifyLeaveSessionRequested=" ORIGINAL_DLL ".EOS_Sessions_AddNotifyLeaveSessionRequested,@584")
@@ -822,6 +822,44 @@ extern __declspec(dllexport) void EOS_Connect_Login(void* Handle, EOS_Connect_Lo
     data->CredentialsApiVersion = Options->Credentials->ApiVersion;
 
     fp_EOS_CreateDeviceIdoriginal(Handle, &options, data, (void *) &EOS_Connect_CreateDeviceId_callback);    
+}
+
+// -------- Session lookup, watched rather than changed -----------------------
+
+// Connect resolves through the matchmaker's /v1/match/request, and the answer
+// it wants is an EOS session id it then looks up here. warp.h answers that
+// call with the matchmaker's own server id, on the guess that the two are the
+// same string. These two say whether the guess was right: the first prints
+// what the client goes looking for, the second how many sessions came back.
+// Neither changes anything - both hand straight over to the real SDK.
+
+typedef struct {
+    int32_t ApiVersion;
+    const char* SessionId;
+} EOS_SessionSearch_SetSessionIdOptions;
+
+typedef struct {
+    int32_t ApiVersion;
+} EOS_SessionSearch_GetSearchResultCountOptions;
+
+extern __declspec(dllexport) int32_t EOS_SessionSearch_SetSessionId(
+        void* Handle, const EOS_SessionSearch_SetSessionIdOptions* Options) {
+    LogText("EOS_SessionSearch_SetSessionId | SessionId: %s",
+            Options && Options->SessionId ? Options->SessionId : "(null)");
+
+    typedef int32_t(__cdecl* fn_t)(void*, const EOS_SessionSearch_SetSessionIdOptions*);
+    fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_SessionSearch_SetSessionId");
+    return original(Handle, Options);
+}
+
+extern __declspec(dllexport) uint32_t EOS_SessionSearch_GetSearchResultCount(
+        void* Handle, const EOS_SessionSearch_GetSearchResultCountOptions* Options) {
+    typedef uint32_t(__cdecl* fn_t)(void*, const EOS_SessionSearch_GetSearchResultCountOptions*);
+    fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_SessionSearch_GetSearchResultCount");
+
+    uint32_t count = original(Handle, Options);
+    LogText("EOS_SessionSearch_GetSearchResultCount | %u result(s)", count);
+    return count;
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
