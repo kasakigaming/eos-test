@@ -36,6 +36,11 @@ if errorlevel 1 goto :fail
 build\pack.exe installer\payload\uc-online2 build\uc-online2.pak
 if errorlevel 1 goto :fail
 
+echo [3b/5] anti-cheat launcher stand-in
+rem Windows subsystem so replacing a game's launcher does not flash a console.
+cl /nologo /O2 /Fobuild\ /Fe:build\eos-proxy-launcher.exe installer\launcher.c User32.lib /link /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup
+if errorlevel 1 goto :fail
+
 echo [4/5] installer resources (embedding the DLL and the payloads)
 rc /nologo /I . /I installer /I build /fo build\setup.res installer\setup.rc
 if errorlevel 1 goto :fail

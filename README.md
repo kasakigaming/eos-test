@@ -79,15 +79,36 @@ What the installer does for you:
 
 - Downloads the emulator from the project's own GitHub release the first time it is needed, and
   caches it in `%LOCALAPPDATA%\eos-proxy` so later installs are offline
+- Works out where the backend actually belongs. The folder you pick is the one holding the EOS
+  SDK, and in a UE game that is a plugin subfolder - `TheIsle\Binaries\Win64\RedpointEOS`. The
+  game loads Steamworks from somewhere else entirely (`Engine\Binaries\ThirdParty\Steamworks\
+  Steamv157\Win64` for that same game), so the installer walks up to the game root, finds the
+  game's own `steam_api64.dll`, and puts the emulator there. An emulator dropped next to the
+  EOS SDK is never loaded, and looks exactly like the backend not working
 - Works out the game's Steam AppID from `steam_appid.txt` or the library's `appmanifest_*.acf`,
   and fills it into the backend's config. `--appid <number>` when it cannot (a game outside a
   Steam library, for instance)
 - Fills in your Steam account name and SteamID64 from the registry, so gbe_fork reports the name
   other players already know you by
 - Parks any file it overwrites as `<name>.eosbak` and records everything it wrote in
-  `eos-proxy-auth.txt` next to the game, so `ug<n>` / `--remove-auth` puts the folder back
-  exactly as it was
+  `eos-proxy-auth.txt` in the game root, every path relative to it, so `ug<n>` / `--remove-auth`
+  puts the game back exactly as it was
 - Only one backend at a time: installing a second one removes the first properly first
+- Stands in for the launcher of a game that ships Easy Anti-Cheat. EAC will not map an unsigned
+  EOS SDK into the process it protects: the game logs `Failed to load ... (GetLastError=193)`
+  and never reaches EOS at all, whatever backend is underneath - and the backend's own
+  `steam_api64.dll` is blocked the same way. So the game's `<Game>.exe`, which is the anti-cheat
+  bootstrapper, is parked as `<Game>.exe.eosbak` and replaced with the small launcher built from
+  `installer\launcher.c`. It reads `EasyAntiCheat\Settings.json` for the real game exe, starts
+  it with the arguments it was given, and waits for it - so Steam still starts the app it knows
+  about, still counts the game as running, and still hands out auth tickets. Launch from Steam
+  exactly as before.
+
+  Two things come with that. A server that enforces anti-cheat will refuse a client started this
+  way, and modifying an anti-cheat protected game carries a ban risk on that game. And Steam
+  puts its own files back whenever it verifies the install - after an interrupted launch, or on
+  "verify integrity of game files" - which silently undoes all of this; run the installer again
+  when that happens
 - SLSsteam is Linux only, so there is nothing to copy into a game folder from Windows. What it
   can do is generate `SLSsteam-config.yaml` with `FakeAppIds` already pointed at the game, ready
   to be copied to `~/.config/SLSsteam/config.yaml` on the Linux side
@@ -151,6 +172,10 @@ game folder next to the downloaded emulator.
 The emulators themselves are not here and are not downloaded at build time - see
 [Antivirus](#antivirus) for why. Anything you do drop into a payload folder is installed along
 with the download, so it is the place for extra per-game config.
+
+Payload files land beside the emulator, wherever the installer worked out that is. A top level
+`@exe\` folder in the payload is the one exception: what is under it is written next to the game
+executable instead, which is where a backend like uc-online2 looks for its `union-crax.ini`.
 
 Files whose name starts with `_` are left out of the archive, and any
 `.ini .txt .cfg .yaml .yml .json .xml` file is a template, with these substituted as it is

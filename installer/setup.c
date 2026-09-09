@@ -25,6 +25,11 @@
 #define PROXY_MARKER EOS_BAK
 #define CONFIG_NAME  "eos-proxy-setup.txt"
 
+// Printed on every run, so a log or a screenshot says which build produced it.
+// Keep it in step with the VERSIONINFO block in setup.rc.
+#define SETUP_VERSION "t19"
+#define SETUP_BUILD   "test 1, 2026-09-09"
+
 #define PATHBUF      1024
 #define MAX_TARGETS  128
 #define MAX_ROOTS    64
@@ -845,7 +850,20 @@ static void RunBatch(Action a, char folders[][PATHBUF], int count, BOOL askAdmin
 
 // Accepts a folder, or a file inside one, so dragging the DLL or the game exe
 // onto the window works too.
+// Everything downstream walks paths a component at a time and separates them
+// with backslashes, so a path handed in on the command line - or dragged onto
+// the exe from a shell that writes forward slashes - is turned into one full
+// backslash path here, before anything looks at it.
 static BOOL NormalizeFolder(char* path) {
+    char full[PATHBUF];
+    for (char* p = path; *p; p++) if (*p == '/') *p = '\\';
+
+    size_t n = strlen(path);
+    while (n > 1 && path[n - 1] == '\\' && path[n - 2] != ':') path[--n] = 0;
+
+    if (GetFullPathNameA(path, sizeof(full), full, NULL))
+        _snprintf_s(path, PATHBUF, _TRUNCATE, "%s", full);
+
     if (DirExists(path)) return TRUE;
     if (FileExists(path)) {
         char* slash = strrchr(path, '\\');
@@ -1075,6 +1093,7 @@ static BOOL OwnsConsole(void) {
 int main(int argc, char** argv) {
     printf("\n  ==============================\n"
              "   EOS Proxy - automatic setup\n"
+             "   " SETUP_VERSION "  (" SETUP_BUILD ")\n"
              "  ==============================\n");
 
     if (!LoadEmbeddedProxy()) {

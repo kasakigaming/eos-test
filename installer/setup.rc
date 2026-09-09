@@ -8,15 +8,24 @@ PROXYDLL RCDATA "EOSSDK-Win64-Shipping.dll"
 // tools\pack.c. build.bat always produces these two, empty when nobody has
 // dropped the third party binaries in yet, and the installer then reports that
 // backend as not bundled. SLSsteam is Linux only so only its config is here.
+// Stand-in for an Easy Anti-Cheat bootstrapper, dropped over a game's own
+// launcher so the game starts without the anti-cheat that refuses to load the
+// proxy. Built by build.bat from installer\launcher.c.
+LAUNCHER RCDATA "eos-proxy-launcher.exe"
+
 GBEFORK  RCDATA "gbe_fork.pak"
 UCONLINE RCDATA "uc-online2.pak"
 SLSCONF  RCDATA "slssteam-config.yaml"
 
 1 RT_MANIFEST "setup.manifest"
 
+// t19 - the first build of the setup that gets The Isle (evrima) online:
+// backend beside the game's own steam_api64.dll, gbe_fork under it, and the
+// anti-cheat bootstrapper replaced so the proxy is allowed to load at all.
+// SETUP_VERSION in setup.c prints the same thing at runtime.
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     1,2,0,0
-PRODUCTVERSION  1,2,0,0
+FILEVERSION     1,3,0,0
+PRODUCTVERSION  1,3,0,0
 FILEOS          VOS_NT_WINDOWS32
 FILETYPE        VFT_APP
 BEGIN
@@ -25,11 +34,12 @@ BEGIN
         BLOCK "040904B0"
         BEGIN
             VALUE "FileDescription", "EOS Proxy Setup"
-            VALUE "FileVersion",     "1.2.0.0"
+            VALUE "FileVersion",     "1.3.0.0"
             VALUE "InternalName",    "eos-proxy-setup"
             VALUE "OriginalFilename","eos-proxy-setup.exe"
             VALUE "ProductName",     "EOS Proxy"
-            VALUE "ProductVersion",  "1.2.0.0"
+            VALUE "ProductVersion",  "t19 (test 1, 2026-09-09)"
+            VALUE "Comments",        "The Isle evrima: proxy + gbe_fork + anti-cheat launcher stand-in"
         END
     END
     BLOCK "VarFileInfo"

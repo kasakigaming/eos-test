@@ -57,8 +57,10 @@ static const AuthInfo g_authInfo[AUTH_COUNT] = {
       // -vs22 asset, which is listed first.
       "emu-win-release.7z",
       "https://github.com/Detanup01/gbe_fork/releases/latest/download/emu-win-release.7z",
-      // The experimental build is the one that hands out the web API ticket the
-      // proxy is waiting on. The regular build does not.
+      // Both builds implement GetAuthTicketForWebApi - it is shared emu code -
+      // but the experimental one also carries the overlay and the CPY/load_dlls
+      // handling, so it is the one worth having. Its socket hooking, which
+      // would block every connection to Epic, is turned off in configs.main.ini.
       "steam_api64.dll", "experimental", "x64" },
 
     { "uc-online2", "uc-online2", "uc-online2", "UCONLINE", "uc",
@@ -80,6 +82,8 @@ static const unsigned char* g_authPak[AUTH_COUNT];
 static DWORD                g_authPakLen[AUTH_COUNT];
 static const unsigned char* g_slsTemplate;
 static DWORD                g_slsTemplateLen;
+static const unsigned char* g_launcher;      // the anti-cheat launcher stand-in
+static DWORD                g_launcherLen;
 
 static const unsigned char* LoadRes(const char* name, DWORD* outLen) {
     *outLen = 0;
@@ -167,6 +171,7 @@ static void AuthLoadPayloads(void) {
         g_authPak[i] = LoadRes(g_authInfo[i].res, &g_authPakLen[i]);
     }
     g_slsTemplate = LoadRes("SLSCONF", &g_slsTemplateLen);
+    g_launcher    = LoadRes("LAUNCHER", &g_launcherLen);
 }
 
 // --------------------------------------------------------------- helpers
@@ -227,6 +232,258 @@ static DWORD AuthWriteBytes(const char* path, const void* data, DWORD len) {
 
 // Downloading and unpacking a backend release. Needs the helpers above.
 #include "fetch.h"
+
+// ------------------------------------------------------ planning the install
+//
+// The folder the user picks is the one holding the EOS SDK, and in a UE game
+// that is a plugin subfolder: TheIsle\Binaries\Win64\RedpointEOS. Hardly
+// anything belongs there. The game loads Steamworks from its own copy of
+// steam_api64.dll somewhere else entirely - Engine\Binaries\ThirdParty\
+// Steamworks\Steamv157\Win64 in that same game - and an emulator dropped
+// beside the EOS SDK is simply never loaded, which looks exactly like the
+// backend not working. So the install is planned from the game root down.
+
+typedef struct {
+    char root[PATHBUF];      // game root, every path below is relative to it
+    char apiRel[PATHBUF];    // folder that owns steam_api64.dll, "" for the root
+    char exeRel[PATHBUF];    // folder holding the game exe
+    char exeName[160];       // the exe itself, the one the anti-cheat starts
+    char bootExe[160];       // the launcher in the root, what Steam starts
+    BOOL hasEac;             // an EasyAntiCheat folder sits in the root
+} AuthLayout;
+
+static BOOL DirHasExe(const char* dir) {
+    char pattern[PATHBUF];
+    PathJoin(pattern, sizeof(pattern), dir, "*.exe");
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA(pattern, &fd);
+    if (h == INVALID_HANDLE_VALUE) return FALSE;
+    FindClose(h);
+    return TRUE;
+}
+
+static BOOL DirHasSub(const char* dir, const char* name) {
+    char probe[PATHBUF];
+    PathJoin(probe, sizeof(probe), dir, name);
+    return DirExists(probe);
+}
+
+static BOOL DirHasEosSdk(const char* dir) {
+    char probe[PATHBUF];
+    PathJoin(probe, sizeof(probe), dir, EOS_DLL);
+    if (FileExists(probe)) return TRUE;
+    PathJoin(probe, sizeof(probe), dir, EOS_BAK);
+    return FileExists(probe);
+}
+
+// Cuts the last component off in place. FALSE at a drive root.
+static BOOL ParentOf(char* path) {
+    char* slash = strrchr(path, '\\');
+    if (!slash || slash == path || slash[-1] == ':') return FALSE;
+    *slash = 0;
+    return TRUE;
+}
+
+// Path of "full" relative to "root", empty when they are the same folder.
+static BOOL PathRelative(const char* root, const char* full, char* out, size_t cap) {
+    size_t n = strlen(root);
+    while (n && (root[n - 1] == '\\' || root[n - 1] == '/')) n--;
+    if (_strnicmp(root, full, n) != 0) return FALSE;
+    const char* p = full + n;
+    while (*p == '\\' || *p == '/') p++;
+    _snprintf_s(out, cap, _TRUNCATE, "%s", p);
+    return TRUE;
+}
+
+static void RelJoin(char* out, size_t cap, const char* base, const char* rel) {
+    if (!base || !base[0]) _snprintf_s(out, cap, _TRUNCATE, "%s", rel);
+    else                   PathJoin(out, cap, base, rel);
+}
+
+// Walks up from the picked folder to the folder a human calls "the game".
+// Folder names that say nothing (Binaries, Win64) are walked through, and so
+// is a plugin folder that holds the EOS SDK and no executable of its own.
+static void AuthFindRoot(const char* folder, char* out, size_t cap) {
+    char dir[PATHBUF];
+    _snprintf_s(dir, sizeof(dir), _TRUNCATE, "%s", folder);
+
+    // Walking up means cutting at backslashes, so a path that came in with
+    // forward slashes has to be one separator throughout first.
+    for (char* p = dir; *p; p++) if (*p == '/') *p = '\\';
+    size_t n = strlen(dir);
+    while (n > 1 && dir[n - 1] == '\\' && dir[n - 2] != ':') dir[--n] = 0;
+
+    for (int up = 0; up < 6; up++) {
+        const char* name = BaseName(dir);
+        if (_stricmp(name, "common") == 0) break;
+        if (!IsGenericFolder(name) && !(DirHasEosSdk(dir) && !DirHasExe(dir))) break;
+
+        char parent[PATHBUF];
+        _snprintf_s(parent, sizeof(parent), _TRUNCATE, "%s", dir);
+        if (!ParentOf(parent)) break;
+        if (_stricmp(BaseName(parent), "common") == 0) break;   // that is the library
+        _snprintf_s(dir, sizeof(dir), _TRUNCATE, "%s", parent);
+    }
+
+    // <Root>\<Project>\Binaries\Win64 stops on <Project>; an Engine folder
+    // beside it means the real root is one further up.
+    char parent[PATHBUF];
+    _snprintf_s(parent, sizeof(parent), _TRUNCATE, "%s", dir);
+    if (ParentOf(parent) && DirHasSub(parent, "Engine") &&
+        _stricmp(BaseName(parent), "common") != 0)
+        _snprintf_s(dir, sizeof(dir), _TRUNCATE, "%s", parent);
+
+    _snprintf_s(out, cap, _TRUNCATE, "%s", dir);
+}
+
+// Nearest folder at or above the picked one that holds an executable.
+static void AuthFindExeDir(const char* folder, const char* root, char* out, size_t cap) {
+    char dir[PATHBUF];
+    _snprintf_s(dir, sizeof(dir), _TRUNCATE, "%s", folder);
+
+    for (int up = 0; up < 6; up++) {
+        if (DirHasExe(dir)) { _snprintf_s(out, cap, _TRUNCATE, "%s", dir); return; }
+        if (_stricmp(dir, root) == 0 || !ParentOf(dir)) break;
+    }
+    _snprintf_s(out, cap, _TRUNCATE, "%s", root);
+}
+
+// The exe in the game root - for an EAC title that is the anti-cheat
+// bootstrapper, and it is what Steam starts. Only answered when there is no
+// doubt: one executable, or one whose name is the game's own. Guessing wrong
+// here would mean writing over the wrong file.
+static BOOL AuthFindRootExe(const char* root, char* out, size_t cap) {
+    char pattern[PATHBUF], only[160], match[160];
+    int count = 0;
+    only[0] = match[0] = 0;
+
+    // "The Isle" as a folder, "TheIsle.exe" as the launcher: spaces do not
+    // survive into exe names, so they are ignored on both sides.
+    char wanted[160];
+    size_t w = 0;
+    for (const char* p = BaseName(root); *p && w + 1 < sizeof(wanted); p++)
+        if (*p != ' ') wanted[w++] = *p;
+    wanted[w] = 0;
+
+    PathJoin(pattern, sizeof(pattern), root, "*.exe");
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA(pattern, &fd);
+    if (h == INVALID_HANDLE_VALUE) return FALSE;
+
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        count++;
+        if (count == 1) _snprintf_s(only, sizeof(only), _TRUNCATE, "%s", fd.cFileName);
+
+        char stem[160];
+        _snprintf_s(stem, sizeof(stem), _TRUNCATE, "%s", fd.cFileName);
+        char* dot = strrchr(stem, '.');
+        if (dot) *dot = 0;
+        if (_stricmp(stem, wanted) == 0)
+            _snprintf_s(match, sizeof(match), _TRUNCATE, "%s", fd.cFileName);
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+
+    if (match[0])            { _snprintf_s(out, cap, _TRUNCATE, "%s", match); return TRUE; }
+    if (count == 1 && only[0]) { _snprintf_s(out, cap, _TRUNCATE, "%s", only); return TRUE; }
+    return FALSE;
+}
+
+// Where the game keeps its own steam_api64.dll, which is the only place a
+// Steam emulator is ever loaded from. The two likely spots are checked before
+// the whole tree, because a game folder can be tens of thousands of files.
+static void AuthFindApiDir(const char* root, const char* exeDir, char* out, size_t cap) {
+    char probe[PATHBUF], hit[PATHBUF];
+    int seen = 0;
+
+    PathJoin(probe, sizeof(probe), exeDir, "steam_api64.dll");
+    if (FileExists(probe)) { _snprintf_s(out, cap, _TRUNCATE, "%s", exeDir); return; }
+
+    PathJoin(probe, sizeof(probe), root, "Engine\\Binaries\\ThirdParty");
+    if (DirExists(probe) &&
+        FindInTree(probe, "steam_api64.dll", "steamworks", "win64", hit, sizeof(hit), &seen)) {
+        ParentOf(hit);
+        _snprintf_s(out, cap, _TRUNCATE, "%s", hit);
+        return;
+    }
+
+    if (FindInTree(root, "steam_api64.dll", "steamworks", "win64", hit, sizeof(hit), &seen)) {
+        ParentOf(hit);
+        _snprintf_s(out, cap, _TRUNCATE, "%s", hit);
+        return;
+    }
+
+    // Nothing to replace: next to the exe is where a game would load it from.
+    _snprintf_s(out, cap, _TRUNCATE, "%s", exeDir);
+}
+
+// The one string this needs out of EasyAntiCheat\Settings.json. Hand rolled
+// for the same reason the github reply is: one unambiguous field.
+static BOOL JsonGetString(const char* text, size_t len, const char* key,
+                          char* out, size_t cap) {
+    char needle[64];
+    _snprintf_s(needle, sizeof(needle), _TRUNCATE, "\"%s\"", key);
+    size_t nl = strlen(needle);
+
+    for (size_t i = 0; i + nl < len; i++) {
+        if (_strnicmp(text + i, needle, nl) != 0) continue;
+
+        size_t j = i + nl;
+        while (j < len && (text[j] == ' ' || text[j] == '\t')) j++;
+        if (j >= len || text[j] != ':') continue;
+        j++;
+        while (j < len && (text[j] == ' ' || text[j] == '\t')) j++;
+        if (j >= len || text[j] != '"') continue;
+        j++;
+
+        size_t o = 0;
+        while (j < len && text[j] != '"' && o + 1 < cap) {
+            if (text[j] == '\\' && j + 1 < len) j++;      // \\ and \/ both land as is
+            out[o++] = text[j++];
+        }
+        out[o] = 0;
+        return o > 0;
+    }
+    return FALSE;
+}
+
+static void AuthPlanLayout(const char* folder, AuthLayout* L) {
+    char picked[PATHBUF], exeDir[PATHBUF], apiDir[PATHBUF];
+
+    memset(L, 0, sizeof(*L));
+    _snprintf_s(picked, sizeof(picked), _TRUNCATE, "%s", folder);
+    for (char* p = picked; *p; p++) if (*p == '/') *p = '\\';
+
+    AuthFindRoot(picked, L->root, sizeof(L->root));
+    AuthFindExeDir(picked, L->root, exeDir, sizeof(exeDir));
+    AuthFindApiDir(L->root, exeDir, apiDir, sizeof(apiDir));
+
+    if (!PathRelative(L->root, apiDir, L->apiRel, sizeof(L->apiRel))) L->apiRel[0] = 0;
+    if (!PathRelative(L->root, exeDir, L->exeRel, sizeof(L->exeRel))) L->exeRel[0] = 0;
+
+    L->hasEac = DirHasSub(L->root, "EasyAntiCheat");
+    if (L->hasEac) AuthFindRootExe(L->root, L->bootExe, sizeof(L->bootExe));
+
+    // Settings.json names the executable the anti-cheat bootstrapper starts,
+    // relative to the root, which is exactly what the launcher script needs.
+    char cfg[PATHBUF], exe[PATHBUF];
+    PathJoin(cfg, sizeof(cfg), L->root, "EasyAntiCheat\\Settings.json");
+    size_t len = 0;
+    unsigned char* buf = ReadFileBytes(cfg, 1u << 16, &len);
+    if (buf) {
+        if (JsonGetString((const char*)buf, len, "executable", exe, sizeof(exe))) {
+            char* slash = strrchr(exe, '\\');
+            if (slash) {
+                *slash = 0;
+                _snprintf_s(L->exeRel,  sizeof(L->exeRel),  _TRUNCATE, "%s", exe);
+                _snprintf_s(L->exeName, sizeof(L->exeName), _TRUNCATE, "%s", slash + 1);
+            } else {
+                _snprintf_s(L->exeName, sizeof(L->exeName), _TRUNCATE, "%s", exe);
+            }
+        }
+        free(buf);
+    }
+}
 
 // ------------------------------------------------------- game identity
 
@@ -354,6 +611,77 @@ static BOOL AuthFindAppId(const char* folder, char* out, size_t cap) {
     return AppIdFromSteam(folder, out, cap);
 }
 
+// Reads who signed in last out of loginusers.vdf. ActiveUser in the registry
+// only holds an account id while the client is actually running, and an install
+// done with Steam closed would otherwise report gbe_fork's placeholder SteamID -
+// the same one for everybody, and the value the proxy derives its EOS device id
+// from - so this is what makes the answer stable either way.
+static BOOL SteamIdFromLoginUsers(const char* accountName, char* out, size_t cap) {
+    char steamPath[PATHBUF];
+    HKEY k;
+    if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Valve\\Steam", 0, KEY_READ, &k) != ERROR_SUCCESS)
+        return FALSE;
+
+    DWORD type = 0, size = sizeof(steamPath) - 1;
+    LONG r = RegQueryValueExA(k, "SteamPath", NULL, &type, (BYTE*)steamPath, &size);
+    RegCloseKey(k);
+    if (r != ERROR_SUCCESS || type != REG_SZ || size <= 1) return FALSE;
+    steamPath[size < sizeof(steamPath) ? size : sizeof(steamPath) - 1] = 0;
+    for (char* p = steamPath; *p; p++) if (*p == '/') *p = '\\';
+
+    char path[PATHBUF];
+    PathJoin(path, sizeof(path), steamPath, "config\\loginusers.vdf");
+    size_t len = 0;
+    unsigned char* buf = ReadFileBytes(path, 1u << 18, &len);
+    if (!buf) return FALSE;
+
+    const char* text = (const char*)buf;
+    char cur[32], best[32], recent[32], first[32];
+    cur[0] = best[0] = recent[0] = first[0] = 0;
+    int wantAccount = 0, wantRecent = 0;
+
+    for (size_t i = 0; i < len; i++) {
+        if (text[i] != '"') continue;
+        size_t s = ++i;
+        while (i < len && text[i] != '"') i++;
+        if (i >= len) break;
+
+        size_t n = i - s;
+        char tok[128];
+        if (n >= sizeof(tok)) continue;
+        memcpy(tok, text + s, n);
+        tok[n] = 0;
+
+        if (wantAccount) {
+            wantAccount = 0;
+            if (cur[0] && accountName && _stricmp(tok, accountName) == 0)
+                _snprintf_s(best, sizeof(best), _TRUNCATE, "%s", cur);
+            continue;
+        }
+        if (wantRecent) {
+            wantRecent = 0;
+            if (cur[0] && strcmp(tok, "1") == 0)
+                _snprintf_s(recent, sizeof(recent), _TRUNCATE, "%s", cur);
+            continue;
+        }
+
+        // A block named by a SteamID64 opens that user's entry.
+        if (n == 17 && strncmp(tok, "7656119", 7) == 0 && AllDigits(tok)) {
+            _snprintf_s(cur, sizeof(cur), _TRUNCATE, "%s", tok);
+            if (!first[0]) _snprintf_s(first, sizeof(first), _TRUNCATE, "%s", tok);
+            continue;
+        }
+        if (_stricmp(tok, "AccountName") == 0)     wantAccount = 1;
+        else if (_stricmp(tok, "MostRecent") == 0) wantRecent = 1;
+    }
+    free(buf);
+
+    const char* pick = best[0] ? best : (recent[0] ? recent : first);
+    if (!pick[0]) return FALSE;
+    _snprintf_s(out, cap, _TRUNCATE, "%s", pick);
+    return TRUE;
+}
+
 static void AuthSteamUser(char* name, size_t nameCap, char* id, size_t idCap) {
     _snprintf_s(name, nameCap, _TRUNCATE, "%s", "Player");
     _snprintf_s(id, idCap, _TRUNCATE, "%s", "76561197960287930");   // gbe_fork's own default
@@ -369,13 +697,20 @@ static void AuthSteamUser(char* name, size_t nameCap, char* id, size_t idCap) {
         }
         RegCloseKey(k);
     }
+    BOOL haveId = FALSE;
     if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Valve\\Steam\\ActiveProcess", 0, KEY_READ, &k) == ERROR_SUCCESS) {
         DWORD v = 0, type = 0, size = sizeof(v);
         if (RegQueryValueExA(k, "ActiveUser", NULL, &type, (BYTE*)&v, &size) == ERROR_SUCCESS &&
-            type == REG_DWORD && v)
+            type == REG_DWORD && v) {
             _snprintf_s(id, idCap, _TRUNCATE, "%llu", 76561197960265728ULL + (ULONGLONG)v);
+            haveId = TRUE;
+        }
         RegCloseKey(k);
     }
+
+    // ActiveUser is 0 whenever the client is closed, which is a normal way to
+    // run this installer.
+    if (!haveId) SteamIdFromLoginUsers(name, id, idCap);
 }
 
 // The name a human would call this game. TheIsle\Binaries\Win64 is "TheIsle",
@@ -461,6 +796,36 @@ typedef struct {
 
 static void AuthManifestPath(const char* folder, char* out, size_t cap) {
     PathJoin(out, cap, folder, AUTH_MANIFEST);
+}
+
+// The manifest sits in the game root, and every path in it is relative to that
+// folder. Older installs put it beside the emulator instead, so that spot is
+// checked too. Called for every game on every redraw of the listing, so it
+// only ever looks where a manifest can plausibly be - never a whole game tree.
+static BOOL AuthHasManifest(const char* dir) {
+    char probe[PATHBUF];
+    AuthManifestPath(dir, probe, sizeof(probe));
+    return FileExists(probe);
+}
+
+static void AuthAnchor(const char* folder, char* out, size_t cap) {
+    if (AuthHasManifest(folder)) { _snprintf_s(out, cap, _TRUNCATE, "%s", folder); return; }
+
+    char root[PATHBUF];
+    AuthFindRoot(folder, root, sizeof(root));
+    if (AuthHasManifest(root)) { _snprintf_s(out, cap, _TRUNCATE, "%s", root); return; }
+
+    char third[PATHBUF], hit[PATHBUF];
+    int seen = 0;
+    PathJoin(third, sizeof(third), root, "Engine\\Binaries\\ThirdParty");
+    if (DirExists(third) &&
+        FindInTree(third, AUTH_MANIFEST, "steamworks", "win64", hit, sizeof(hit), &seen)) {
+        ParentOf(hit);
+        _snprintf_s(out, cap, _TRUNCATE, "%s", hit);
+        return;
+    }
+
+    _snprintf_s(out, cap, _TRUNCATE, "%s", root);
 }
 
 static BOOL AuthReadManifest(const char* folder, char* backend, size_t bcap,
@@ -558,8 +923,11 @@ static void AuthPruneDirs(const char* folder, const AuthFileRec* rec, int n) {
     }
 }
 
-static BOOL AuthRemove(const char* folder) {
+static BOOL AuthRemove(const char* picked) {
     g_lastError = 0;
+
+    char folder[PATHBUF];
+    AuthAnchor(picked, folder, sizeof(folder));
 
     char backend[64], appid[16];
     static AuthFileRec rec[AUTH_MAX_FILES];
@@ -611,7 +979,7 @@ static BOOL AuthRemove(const char* folder) {
     return ok;
 }
 
-static BOOL AuthSlsConfig(const char* folder, const char* appidOverride) {
+static BOOL AuthSlsConfig(const char* picked, const char* appidOverride) {
     g_lastError = 0;
 
     if (!g_slsTemplateLen) {
@@ -619,10 +987,15 @@ static BOOL AuthSlsConfig(const char* folder, const char* appidOverride) {
         return FALSE;
     }
 
+    // The config describes the whole game, so it belongs in the game root
+    // rather than in whichever subfolder the EOS SDK happened to be in.
+    char folder[PATHBUF];
+    AuthFindRoot(picked, folder, sizeof(folder));
+
     AuthVars v;
     if (!AuthFillVars(folder, appidOverride, &v)) {
         printf("  X  could not work out the Steam AppID for this folder.\n");
-        printf("     Pass it yourself:  setup.exe --sls --appid <number> \"%s\"\n", folder);
+        printf("     Pass it yourself:  setup.exe --sls --appid <number> \"%s\"\n", picked);
         return FALSE;
     }
 
@@ -632,10 +1005,11 @@ static BOOL AuthSlsConfig(const char* folder, const char* appidOverride) {
 
     // Anything already installed here is replaced, the same as a real backend:
     // running two of them at once is not a thing.
-    char had[64];
-    if (AuthReadManifest(folder, had, sizeof(had), NULL, 0, NULL, 0, NULL)) {
+    char anchor[PATHBUF], had[64];
+    AuthAnchor(picked, anchor, sizeof(anchor));
+    if (AuthReadManifest(anchor, had, sizeof(had), NULL, 0, NULL, 0, NULL)) {
         printf("  -  %s is already installed here, replacing it\n", had);
-        if (!AuthRemove(folder)) { free(out); return FALSE; }
+        if (!AuthRemove(picked)) { free(out); return FALSE; }
     }
 
     char path[PATHBUF];
@@ -786,11 +1160,29 @@ static DWORD AuthPlace(const char* folder, const char* rel,
     return 0;
 }
 
-static BOOL AuthInstall(const char* folder, AuthBackend b, const char* appidOverride) {
+// A game with EasyAntiCheat needs one thing that copying files cannot give it.
+// EAC will not map an unsigned EOS SDK into the process it protects: the game
+// logs "Failed to load ... (GetLastError=193)" and never reaches EOS at all, no
+// matter which backend sits underneath. The proxy only runs when the game is
+// started without the anti-cheat bootstrapper, so that is what this writes.
+// Replacing the bootstrapper rather than working around it keeps Steam's half
+// of the launch untouched: Steam still starts the exe it knows about, still
+// counts the game as running, and still hands out the auth ticket the backend
+// and the proxy need. See installer\launcher.c.
+static DWORD AuthWriteLauncher(const AuthLayout* L, AuthFileRec* rec, int* done,
+                               char* nameOut, size_t nameCap) {
+    nameOut[0] = 0;
+    if (!L->hasEac || !L->bootExe[0] || !g_launcherLen) return 0;
+
+    _snprintf_s(nameOut, nameCap, _TRUNCATE, "%s", L->bootExe);
+    return AuthPlace(L->root, L->bootExe, g_launcher, g_launcherLen, rec, done);
+}
+
+static BOOL AuthInstall(const char* picked, AuthBackend b, const char* appidOverride) {
     g_lastError = 0;
     const AuthInfo* info = &g_authInfo[b];
 
-    if (b == AUTH_SLS) return AuthSlsConfig(folder, appidOverride);
+    if (b == AUTH_SLS) return AuthSlsConfig(picked, appidOverride);
 
     if (!AuthAvailable(b)) {
         printf("  X  this build of the installer has no way to install %s.\n", info->label);
@@ -798,57 +1190,70 @@ static BOOL AuthInstall(const char* folder, AuthBackend b, const char* appidOver
         return FALSE;
     }
 
+    // Where each piece goes is worked out from the game root, not from the
+    // folder that happened to hold the EOS SDK. See AuthPlanLayout.
+    AuthLayout L;
+    AuthPlanLayout(picked, &L);
+
     AuthVars v;
-    if (!AuthFillVars(folder, appidOverride, &v)) {
+    if (!AuthFillVars(L.root, appidOverride, &v)) {
         printf("  X  could not work out the Steam AppID for this folder.\n");
         printf("     %s cannot produce a ticket without it. Pass it yourself:\n", info->label);
-        printf("       setup.exe --%s --appid <number> \"%s\"\n", info->flag, folder);
+        printf("       setup.exe --%s --appid <number> \"%s\"\n", info->flag, picked);
         return FALSE;
     }
 
     // Anything already here is removed first rather than layered on top, so the
     // .eosbak files keep pointing at the game's own originals.
-    char had[64];
-    if (AuthReadManifest(folder, had, sizeof(had), NULL, 0, NULL, 0, NULL)) {
+    char anchor[PATHBUF], had[64];
+    AuthAnchor(picked, anchor, sizeof(anchor));
+    if (AuthReadManifest(anchor, had, sizeof(had), NULL, 0, NULL, 0, NULL)) {
         printf("  -  %s is already installed here, replacing it\n", had);
-        if (!AuthRemove(folder)) return FALSE;
+        if (!AuthRemove(picked)) return FALSE;
     }
 
     printf("  -  %s for app %s as \"%s\" (%s)\n",
            info->label, v.appid, v.account, v.steamid);
+    printf("  -  game root : %s\n", L.root);
+    printf("  -  emulator  : %s\n", L.apiRel[0] ? L.apiRel : "(the game root)");
 
     static AuthFileRec rec[AUTH_MAX_FILES];
     int done = 0;
     BOOL ok = TRUE;
 
-    // 1. the emulator, fetched from upstream and cached between runs
+    // 1. the emulator, fetched from upstream and cached between runs. It goes
+    //    beside the game's own steam_api64.dll, the only place it is loaded.
     if (info->api) {
         char src[PATHBUF];
-        if (!AuthEnsureBinary(b, folder, src, sizeof(src))) return FALSE;
+        if (!AuthEnsureBinary(b, L.root, src, sizeof(src))) return FALSE;
 
         size_t dllLen = 0;
         unsigned char* dll = ReadFileBytes(src, 64u << 20, &dllLen);
         if (!dll || dllLen == 0) {
             free(dll);
             printf("  X  could not read %s back out of the cache.\n", info->wanted);
-            ReportAvBlock(info->wanted, folder);
+            ReportAvBlock(info->wanted, L.root);
             return FALSE;
         }
 
-        DWORD err = AuthPlace(folder, info->wanted, dll, (DWORD)dllLen, rec, &done);
+        char rel[PATHBUF];
+        RelJoin(rel, sizeof(rel), L.apiRel, info->wanted);
+        DWORD err = AuthPlace(L.root, rel, dll, (DWORD)dllLen, rec, &done);
         free(dll);
 
         if (err) {
             g_lastError = err;
-            printf("  X  writing %s failed: %s\n", info->wanted, ErrText(err));
+            printf("  X  writing %s failed: %s\n", rel, ErrText(err));
             ok = FALSE;
         } else {
-            printf("  -  %s (%llu bytes%s)\n", info->wanted, (ULONGLONG)dllLen,
+            printf("  -  %s (%llu bytes%s)\n", rel, (ULONGLONG)dllLen,
                    rec[done - 1].hadOriginal ? ", original parked" : "");
         }
     }
 
-    // 2. the config templates, which do ride along inside this exe
+    // 2. the config templates, which do ride along inside this exe. They land
+    //    beside the emulator, except for a "@exe\" prefix, which means the
+    //    backend wants that file next to the game executable instead.
     PakCursor c;
     PakEntry e;
     if (ok && PakOpen(g_authPak[b], g_authPakLen[b], &c)) {
@@ -859,9 +1264,14 @@ static BOOL AuthInstall(const char* folder, AuthBackend b, const char* appidOver
                 break;
             }
 
-            char rel[PATHBUF];
-            memcpy(rel, e.path, e.pathLen);
-            rel[e.pathLen] = 0;
+            char entry[PATHBUF], rel[PATHBUF];
+            memcpy(entry, e.path, e.pathLen);
+            entry[e.pathLen] = 0;
+
+            const char* base = L.apiRel;
+            const char* tail = entry;
+            if (_strnicmp(entry, "@exe\\", 5) == 0) { base = L.exeRel; tail = entry + 5; }
+            RelJoin(rel, sizeof(rel), base, tail);
 
             const unsigned char* data = e.data;
             DWORD len = e.dataLen;
@@ -872,7 +1282,7 @@ static BOOL AuthInstall(const char* folder, AuthBackend b, const char* appidOver
                 data = sub;
             }
 
-            DWORD err = AuthPlace(folder, rel, data, len, rec, &done);
+            DWORD err = AuthPlace(L.root, rel, data, len, rec, &done);
             free(sub);
 
             if (err) {
@@ -885,8 +1295,22 @@ static BOOL AuthInstall(const char* folder, AuthBackend b, const char* appidOver
         }
     }
 
+    // 3. the way to actually start the game, when an anti-cheat is in the way
+    char launcher[PATHBUF];
+    launcher[0] = 0;
     if (ok) {
-        DWORD err = AuthWriteManifest(folder, info->id, v.appid, rec, done);
+        DWORD err = AuthWriteLauncher(&L, rec, &done, launcher, sizeof(launcher));
+        if (err) {
+            g_lastError = err;
+            printf("  X  writing %s failed: %s\n", launcher, ErrText(err));
+            ok = FALSE;
+        } else if (launcher[0]) {
+            printf("  -  %s (anti-cheat launcher replaced, original parked)\n", launcher);
+        }
+    }
+
+    if (ok) {
+        DWORD err = AuthWriteManifest(L.root, info->id, v.appid, rec, done);
         if (err) {
             g_lastError = err;
             printf("  X  could not write %s: %s\n", AUTH_MANIFEST, ErrText(err));
@@ -895,13 +1319,30 @@ static BOOL AuthInstall(const char* folder, AuthBackend b, const char* appidOver
     }
 
     if (!ok) {
-        AuthUndo(folder, rec, done);
-        AuthPruneDirs(folder, rec, done);
+        AuthUndo(L.root, rec, done);
+        AuthPruneDirs(L.root, rec, done);
         printf("  -  rolled back, the folder is as it was.\n");
         return FALSE;
     }
 
     printf("  OK %s installed (%d file(s)).\n", info->label, done);
+    if (L.hasEac) {
+        printf("\n  !  This game runs Easy Anti-Cheat, which will not load the proxy:\n");
+        printf("     with it in the way the game only logs GetLastError=193 and stops.\n");
+        if (launcher[0]) {
+            printf("     %s is now a stand-in that starts the game without it, so\n", launcher);
+            printf("     launch from Steam exactly as before. Servers that enforce\n");
+            printf("     anti-cheat will refuse this, and modifying a protected game\n");
+            printf("     carries a ban risk on that game - your call to make.\n");
+            printf("\n     If Steam ever verifies the game - it does that after an\n");
+            printf("     interrupted launch, and on \"verify integrity of game files\" -\n");
+            printf("     it puts the original files back and everything here is undone.\n");
+            printf("     Run this again after that happens.\n");
+        } else {
+            printf("     Could not tell which exe is its launcher, so nothing was\n");
+            printf("     replaced. Start the game exe under Binaries\\Win64 by hand.\n");
+        }
+    }
     return TRUE;
 }
 
@@ -909,8 +1350,11 @@ static BOOL AuthInstall(const char* folder, AuthBackend b, const char* appidOver
 
 // Short label for the game listing. Backends put there by hand are recognised
 // too, so the listing never claims a folder is untouched when it is not.
-static const char* AuthStatusText(const char* folder) {
+static const char* AuthStatusText(const char* picked) {
     static char buf[96];
+
+    char folder[PATHBUF];
+    AuthAnchor(picked, folder, sizeof(folder));
 
     char backend[64], appid[16];
     if (AuthReadManifest(folder, backend, sizeof(backend), appid, sizeof(appid), NULL, 0, NULL)) {
@@ -919,12 +1363,20 @@ static const char* AuthStatusText(const char* folder) {
         return buf;
     }
 
-    char probe[PATHBUF];
-    PathJoin(probe, sizeof(probe), folder, "steam_settings");
-    if (DirExists(probe)) return "gbe_fork (by hand)";
+    // Backends put there by hand live beside the game's steam_api64.dll, which
+    // is rarely the folder the EOS SDK is in, so both are looked at.
+    const char* where[2] = { picked, folder };
+    for (int i = 0; i < 2; i++) {
+        char probe[PATHBUF];
+        PathJoin(probe, sizeof(probe), where[i], "steam_settings");
+        if (DirExists(probe)) return "gbe_fork (by hand)";
 
-    PathJoin(probe, sizeof(probe), folder, "OnlineFix64.dll");
-    if (FileExists(probe)) return "online-fix (by hand)";
+        PathJoin(probe, sizeof(probe), where[i], "OnlineFix64.dll");
+        if (FileExists(probe)) return "online-fix (by hand)";
+
+        PathJoin(probe, sizeof(probe), where[i], "union-crax.ini");
+        if (FileExists(probe)) return "uc-online2 (by hand)";
+    }
 
     return "none";
 }
