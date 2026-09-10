@@ -1367,6 +1367,13 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
         char path[1024];
         GetModuleFileNameA(hModule, path, sizeof(path));
         LogText("Location: %s", path);
+        // Whether the launcher's -LogCmds actually reached the game. The
+        // game's own log never says: a shipping build does not echo its
+        // command line, and the categories it raises are named only in the
+        // sessions where a raise happened, which no session with a join ever
+        // has. From in here there is nothing left to infer - this is the
+        // arguments the game was started with.
+        LogText("Command line: %s", GetCommandLineA());
         char dir[1024];
         _splitpath_s(path,
             NULL, 0,

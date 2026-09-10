@@ -21,13 +21,22 @@
 
 #define PATHBUF 1024
 
-// The log categories that say why a net driver refuses to start. They belong on
-// the command line rather than in a config file: the game rewrites its own
-// Saved\Config\WindowsClient\Engine.ini on every run, so a [Core.Log] section
-// added there is gone by the time it would be read. Steam's own launch options
-// still follow ours, so a user setting -LogCmds themselves overrides this.
+// The log categories worth asking for, and a caveat about what asking is worth.
+// This build answers to almost none of them: LogNet, LogNetDriver and
+// LogHandshake have never printed a line at any verbosity, and the net events
+// stock Unreal logs under LogNet come out under the game's own LogGlobalStatus
+// instead. They stay in the list because they cost nothing and would be the
+// first thing to speak up if a build ever restored them.
+//
+// The command line is the only route left. A [Core.Log] section in
+// Saved\Config\WindowsClient\Engine.ini does not survive - the game rewrites
+// that file down to a single stanza on every run - and whether the command line
+// itself arrives is not settled either, which is why the proxy logs it from
+// inside the game process. Steam's own launch options still follow ours, so a
+// user setting -LogCmds themselves overrides this.
 #define LOG_CMDS "-LogCmds=\"LogNet Verbose, LogNetDriver Verbose, "                \
-                 "LogHandshake Verbose, LogOnlineSession Verbose, "                 \
+                 "LogHandshake Verbose, LogGlobalStatus Verbose, "                  \
+                 "LogMatchmaking Verbose, LogOnlineSession Verbose, "               \
                  "LogRedpointEOSNetworking Verbose, LogRedpointEOSAntiCheat Verbose\""
 
 static void Fail(const char* what) {

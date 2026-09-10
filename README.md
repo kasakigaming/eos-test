@@ -164,9 +164,8 @@ off on:
 
 | endpoint | ticket | what it is |
 |---|---|---|
-| `POST /v1/servers/community` | not required | the community server list. This is the one that fills the browser, which is why 900-odd servers show up while the status line says the network is down |
 | `POST /v1/servers/status` | required, `401 Steam ticket invalid` | the official network state, `ONLINE` / `OFFLINE` / `UPDATING` / `MAINTENANCE`. The 401 is what paints the menu line red |
-| `POST /v1/servers/active` | not required for the unverified set | the official server list. Asked for that way it answers without a ticket at all |
+| `POST /v1/servers/active` | not required for the unverified set | the server list, and the only one there is. Which tab of the browser you are on is the `server_type` field in the body: `Official` needs a ticket and gets the same `401`, `Unverified` needs none and answers with the whole community list, 960 servers of it. That is why the browser fills while the status line says the network is down |
 | `POST /v1/servers/queue/join` | not required | answers `200` with the address and queue port of the server you picked |
 | `POST /v1/match/request` | required, `401 Steam ticket invalid` | turns the server you picked into an EOS session id to look up and join. This is where a join stops |
 
@@ -238,8 +237,10 @@ With that in place the join goes all the way onto the wire. No travel failure, a
 
 ### Where it still stops
 
-The server half is the wall, and it is a real one. Verified the same way on two different
-community servers:
+The server half is the wall, and it is a real one. Every server a join was ever tried against
+here was an unverified one - each `serverId` was looked up in the `Unverified` list afterwards and
+all of them were in it. So this is not the official set being stricter; it is what a community
+server does too:
 
 ```
 EOS_Sessions_JoinSession | ResultCode 0
@@ -249,12 +250,17 @@ EOS_AntiCheatClient_ReceiveMessageFromServer | stand-in, message dropped
 EOS_AntiCheatClient_ReceiveMessageFromServer | stand-in, message dropped
 ```
 
-The server sends an anti-cheat challenge every three seconds. Logging the bytes shows the same 24
-of them every single time, never varying:
+The server sends an anti-cheat challenge every three seconds, 24 bytes of it. Within one join it
+never varies. Between servers it does:
 
 ```
 02 00 0b 00 10 5d 00 00 00 00 00 00 00 00 00 00 00 00 00 00 81 64 0c fb
+02 00 0b 00 f9 79 00 00 00 00 00 00 00 00 00 00 00 00 00 00 0c 9c 1d 3b
 ```
+
+Four bytes of header, then a two byte value that changes per session, then twelve zeros, then four
+bytes that look like a checksum over the rest. So there is a per-session value in it, and a canned
+reply could not have worked even in principle.
 
 A real client answers through the callback registered with `AddNotifyMessageToServer`, and that
 answer is an attestation the EAC client module produces and Epic's own service verifies. A
@@ -264,6 +270,55 @@ That was tested rather than assumed. A build sent the server's own message strai
 and nothing changed: the server re-sent the identical bytes eight times over 22 seconds, then
 dropped the connection on the same 73 second timeout as silence. A wrong answer is worth exactly
 what no answer is worth, so that code is not kept — only the logging that proved it.
+
+Worth being precise about the shape of the failure, because it is easy to read it as something
+else. The server never refuses. A refusal in Unreal is an `NMT_Failure` carrying a reason string,
+and the game puts that string on screen. Nothing like that arrives. What happens instead is that
+the connection is made, the challenge is sent, and the login is simply never approved:
+
+```
+LogGlobalStatus: UEngine::Browse Started Browse: "78.46.76.73/Game/TheIsle/Maps/TitleMap?765611993..."
+LogNetVersion: TheIsle 0.21.784, ... (Checksum: 1531937975)
+   ... 73 seconds, nothing ...
+LogExit: Name:PendingNetDriver Def:GameNetDriver RedpointEOSNetDriver_2147438649 shut down
+LogGlobalStatus: UEngine::Browse Started Browse: "/Game/TheIsle/Maps/TitleMap?closed"
+```
+
+Silence and a timeout, not an error. That rules out the Steam ticket as the cause of *this* step -
+a matchmaker that refuses a ticket says so in the body of an HTTP answer, and a game server that
+refused a login would say so in a `Failure` packet. Neither happens. The approval is held open
+waiting for an attestation that never comes.
+
+Reading these logs takes one caveat, and it is a gap rather than a detail. `LogNet` never prints a
+line - not at any verbosity, in any of the eleven sessions logged here. The only engine net
+category that appears at all is `LogNetVersion`. What this build does instead is log the same
+events under a category of its own:
+
+```
+LogGlobalStatus: UEngine::Browse Started Browse: "78.46.76.73/Game/TheIsle/..."
+LogGlobalStatus: Warning: UEngine::BroadcastTravelFailure Travel failed, type: ETravelFailure::PendingNetGameCreateFailure
+```
+
+Both of those are `LogNet` call sites in stock Unreal, so the net layer is not silent, it is
+reporting somewhere else. `LogHandshake` and `LogNetDriver` have no such substitute and say
+nothing at all.
+
+Whether `-LogCmds` reaches the game is still unproven, and the launcher passing it is not evidence
+that it arrives. One session out of eleven printed `Log category ... verbosity has been raised to
+Verbose`, and the seven categories it names are not the six the launcher passes. No session that
+got as far as a join has ever printed one. The categories that do come through verbose,
+`LogOnlineSession` and the `LogRedpointEOS*` set, come through in sessions with no raise at all,
+so they are verbose by default and settle nothing either way. The config route is closed for the
+reason the launcher already says: the game rewrites `Saved\Config\WindowsClient\Engine.ini` down to
+a single stanza on every run, so a `[Core.Log]` section added there is gone before it is read.
+
+That one surviving stanza is worth reading on its own account. It is
+`[GameNetDriver StatelessConnectHandlerComponent]`, and its `CachedClientID` has counted up once
+per connection attempt, 1 to 6 across these sessions. Unreal's stateless handshake did run every
+time, which is the last thing the game admits to before the silence.
+
+So the next thing to settle is whether the command line arrives at all, and the proxy can answer
+that from inside the game process instead of guessing at it from outside.
 
 **That is the honest limit of this whole approach, and it is not a bug to be fixed.** Everything
 before it works: login, the server browser, the matchmaker, the session lookup, the join, the net

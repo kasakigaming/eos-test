@@ -21,6 +21,13 @@
 //     401 {"detail": "Steam ticket invalid"}     <- what Connect resolves through
 //   POST /v1/servers/queue/join     {"serverId"}
 //     200 {"ipAddress", "queuePort", "serverStatus"}   no ticket at all
+//   POST /v1/servers/active         {"server_type", "steam_ticket", ...}
+//     200 [ {"serverId", "serverName", "ipAddress", ...}, ... ]
+//     401 {"detail": "Steam ticket invalid"}
+//     This is the whole server browser, both tabs of it. "server_type":
+//     "Official" is refused without a ticket; "Unverified" is answered
+//     without one, with every community server there is. There is no
+//     separate community endpoint - that string is not in the executable.
 //
 // Every one of those URLs is a plain ASCII literal in the game executable, so
 // this rewrites them in memory to a loopback address the proxy listens on and
