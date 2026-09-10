@@ -56,7 +56,7 @@ BEGIN
             VALUE "InternalName",    "eos-proxy-setup"
             VALUE "OriginalFilename","eos-proxy-setup.exe"
             VALUE "ProductName",     "EOS Proxy"
-            VALUE "ProductVersion",  "t89 (test 8, 2026-09-10)"
+            VALUE "ProductVersion",  "t99 (test 9, 2026-09-11)"
             VALUE "Comments",        "The Isle evrima: proxy + gbe_fork + anti-cheat launcher stand-in"
         END
     END

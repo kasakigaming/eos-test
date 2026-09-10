@@ -685,8 +685,8 @@ static HMODULE g_hOrig = NULL;
 // actually loaded. A stale DLL left in a game folder by an older installer is
 // otherwise indistinguishable from a hook that never fired. Keep it in step
 // with SETUP_VERSION in installer\setup.c.
-#define PROXY_VERSION "t89"
-#define PROXY_BUILD   "test 8, 2026-09-10"
+#define PROXY_VERSION "t99"
+#define PROXY_BUILD   "test 9, 2026-09-11"
 
 // -------- EOS Structs ------------------------
 
