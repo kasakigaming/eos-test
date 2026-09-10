@@ -30,10 +30,13 @@ SLSCONF  RCDATA "slssteam-config.yaml"
 // t49 - EOS_AntiCheatClient_BeginSession is answered as success, so the net
 // driver stops refusing to bring the connection up on a machine where the
 // anti-cheat client cannot run. Nothing is defeated outside this process.
+// t59 - the session id guess held: the client finds the session warp.h names.
+// What stops a join is now somewhere between finding it and connecting, so the
+// rest of that path is hooked and logged. Watching only, nothing changed.
 // SETUP_VERSION in setup.c prints the same thing at runtime.
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     1,6,0,0
-PRODUCTVERSION  1,6,0,0
+FILEVERSION     1,7,0,0
+PRODUCTVERSION  1,7,0,0
 FILEOS          VOS_NT_WINDOWS32
 FILETYPE        VFT_APP
 BEGIN
@@ -42,11 +45,11 @@ BEGIN
         BLOCK "040904B0"
         BEGIN
             VALUE "FileDescription", "EOS Proxy Setup"
-            VALUE "FileVersion",     "1.6.0.0"
+            VALUE "FileVersion",     "1.7.0.0"
             VALUE "InternalName",    "eos-proxy-setup"
             VALUE "OriginalFilename","eos-proxy-setup.exe"
             VALUE "ProductName",     "EOS Proxy"
-            VALUE "ProductVersion",  "t49 (test 4, 2026-09-10)"
+            VALUE "ProductVersion",  "t59 (test 5, 2026-09-10)"
             VALUE "Comments",        "The Isle evrima: proxy + gbe_fork + anti-cheat launcher stand-in"
         END
     END

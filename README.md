@@ -182,10 +182,19 @@ Two calls are answered locally instead, and only when the matchmaker refuses the
 - `/v1/servers/status` is reported as `ONLINE`, so the menu stops printing the official network as
   offline. A genuine ticket, and any genuine `MAINTENANCE` or `UPDATING` state, still wins.
 - `/v1/match/request` is answered with the server id the client asked about, reused as the session
-  id. That rests on a guess: that the matchmaker's server id and the EOS session id are the same
-  string, both being 32 hex characters the server registers from the same place.
-  `EOS_SessionSearch_SetSessionId` in `src\main.c` logs what the client then goes looking for and
-  how many sessions come back, which is how you find out whether the guess holds.
+  id. That rested on a guess: that the matchmaker's server id and the EOS session id are the same
+  string, both being 32 hex characters the server registers from the same place. **The guess held.**
+  A real run searched for the id the proxy handed over and came back with one result:
+
+  ```
+  Warp: match refused, answering with session_id=69902ddde...413409
+  EOS_SessionSearch_SetSessionId | SessionId: 69902ddde...413409
+  EOS_SessionSearch_GetSearchResultCount | 1 result(s)
+  ```
+
+  So the client does find the session. What stops a join now happens after that, which is why the
+  rest of the path is hooked and logged in `src\main.c`: copying the result out, reading the
+  `HostAddress` it carries, and the `ResultCode` that `EOS_Sessions_JoinSession` answers with.
 
 Worth being blunt about the limit: **nothing here produces a ticket Valve would sign**. The status
 line reads Online and the browser fills, but a session id that does not exist cannot be invented,

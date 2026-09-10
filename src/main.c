@@ -551,7 +551,7 @@
 #pragma comment(linker, "/export:EOS_Sanctions_PlayerSanction_Release=" ORIGINAL_DLL ".EOS_Sanctions_PlayerSanction_Release,@555")
 #pragma comment(linker, "/export:EOS_Sanctions_QueryActivePlayerSanctions=" ORIGINAL_DLL ".EOS_Sanctions_QueryActivePlayerSanctions,@556")
 #pragma comment(linker, "/export:EOS_SessionDetails_Attribute_Release=" ORIGINAL_DLL ".EOS_SessionDetails_Attribute_Release,@557")
-#pragma comment(linker, "/export:EOS_SessionDetails_CopyInfo=" ORIGINAL_DLL ".EOS_SessionDetails_CopyInfo,@558")
+// #pragma comment(linker, "/export:EOS_SessionDetails_CopyInfo=" ORIGINAL_DLL ".EOS_SessionDetails_CopyInfo,@558")
 #pragma comment(linker, "/export:EOS_SessionDetails_CopySessionAttributeByIndex=" ORIGINAL_DLL ".EOS_SessionDetails_CopySessionAttributeByIndex,@559")
 #pragma comment(linker, "/export:EOS_SessionDetails_CopySessionAttributeByKey=" ORIGINAL_DLL ".EOS_SessionDetails_CopySessionAttributeByKey,@560")
 #pragma comment(linker, "/export:EOS_SessionDetails_GetSessionAttributeCount=" ORIGINAL_DLL ".EOS_SessionDetails_GetSessionAttributeCount,@561")
@@ -567,7 +567,7 @@
 #pragma comment(linker, "/export:EOS_SessionModification_SetJoinInProgressAllowed=" ORIGINAL_DLL ".EOS_SessionModification_SetJoinInProgressAllowed,@571")
 #pragma comment(linker, "/export:EOS_SessionModification_SetMaxPlayers=" ORIGINAL_DLL ".EOS_SessionModification_SetMaxPlayers,@572")
 #pragma comment(linker, "/export:EOS_SessionModification_SetPermissionLevel=" ORIGINAL_DLL ".EOS_SessionModification_SetPermissionLevel,@573")
-#pragma comment(linker, "/export:EOS_SessionSearch_CopySearchResultByIndex=" ORIGINAL_DLL ".EOS_SessionSearch_CopySearchResultByIndex,@574")
+// #pragma comment(linker, "/export:EOS_SessionSearch_CopySearchResultByIndex=" ORIGINAL_DLL ".EOS_SessionSearch_CopySearchResultByIndex,@574")
 #pragma comment(linker, "/export:EOS_SessionSearch_Find=" ORIGINAL_DLL ".EOS_SessionSearch_Find,@575")
 // #pragma comment(linker, "/export:EOS_SessionSearch_GetSearchResultCount=" ORIGINAL_DLL ".EOS_SessionSearch_GetSearchResultCount,@576")
 #pragma comment(linker, "/export:EOS_SessionSearch_Release=" ORIGINAL_DLL ".EOS_SessionSearch_Release,@577")
@@ -594,7 +594,7 @@
 #pragma comment(linker, "/export:EOS_Sessions_GetInviteCount=" ORIGINAL_DLL ".EOS_Sessions_GetInviteCount,@598")
 #pragma comment(linker, "/export:EOS_Sessions_GetInviteIdByIndex=" ORIGINAL_DLL ".EOS_Sessions_GetInviteIdByIndex,@599")
 #pragma comment(linker, "/export:EOS_Sessions_IsUserInSession=" ORIGINAL_DLL ".EOS_Sessions_IsUserInSession,@600")
-#pragma comment(linker, "/export:EOS_Sessions_JoinSession=" ORIGINAL_DLL ".EOS_Sessions_JoinSession,@601")
+// #pragma comment(linker, "/export:EOS_Sessions_JoinSession=" ORIGINAL_DLL ".EOS_Sessions_JoinSession,@601")
 #pragma comment(linker, "/export:EOS_Sessions_QueryInvites=" ORIGINAL_DLL ".EOS_Sessions_QueryInvites,@602")
 #pragma comment(linker, "/export:EOS_Sessions_RegisterPlayers=" ORIGINAL_DLL ".EOS_Sessions_RegisterPlayers,@603")
 #pragma comment(linker, "/export:EOS_Sessions_RejectInvite=" ORIGINAL_DLL ".EOS_Sessions_RejectInvite,@604")
@@ -685,8 +685,8 @@ static HMODULE g_hOrig = NULL;
 // actually loaded. A stale DLL left in a game folder by an older installer is
 // otherwise indistinguishable from a hook that never fired. Keep it in step
 // with SETUP_VERSION in installer\setup.c.
-#define PROXY_VERSION "t49"
-#define PROXY_BUILD   "test 4, 2026-09-10"
+#define PROXY_VERSION "t59"
+#define PROXY_BUILD   "test 5, 2026-09-10"
 
 // -------- EOS Structs ------------------------
 
@@ -956,14 +956,29 @@ extern __declspec(dllexport) int32_t EOS_AntiCheatClient_GetProtectMessageOutput
     return result;
 }
 
-// -------- Session lookup, watched rather than changed -----------------------
+// -------- The join path, watched rather than changed ------------------------
 
 // Connect resolves through the matchmaker's /v1/match/request, and the answer
 // it wants is an EOS session id it then looks up here. warp.h answers that
 // call with the matchmaker's own server id, on the guess that the two are the
-// same string. These two say whether the guess was right: the first prints
-// what the client goes looking for, the second how many sessions came back.
-// Neither changes anything - both hand straight over to the real SDK.
+// same string.
+//
+// The guess held. A real run searched for the id warp.h handed over and came
+// back with one result:
+//
+//   Warp: match refused, answering with session_id=69902ddde...413409
+//   EOS_SessionSearch_SetSessionId | SessionId: 69902ddde...413409
+//   EOS_SessionSearch_GetSearchResultCount | 1 result(s)
+//
+// and then the log went quiet. The anti-cheat hook below never printed a line,
+// because the net driver never got as far as calling it: whatever stops the
+// join now happens between finding that session and opening a connection to
+// it, and every call in between went to the real SDK unseen.
+//
+// So the rest of that path is hooked here too. None of these change anything -
+// all of them hand straight over to the real SDK and only print what passed
+// through, in the order the client would walk it: count the results, copy one
+// out, read where it says the server lives, then join it.
 
 typedef struct {
     int32_t ApiVersion;
@@ -994,6 +1009,90 @@ extern __declspec(dllexport) uint32_t EOS_SessionSearch_GetSearchResultCount(
     return count;
 }
 
+typedef struct {
+    int32_t  ApiVersion;
+    uint32_t SessionIndex;
+} EOS_SessionSearch_CopySearchResultByIndexOptions;
+
+extern __declspec(dllexport) int32_t EOS_SessionSearch_CopySearchResultByIndex(
+        void* Handle, const EOS_SessionSearch_CopySearchResultByIndexOptions* Options,
+        void** OutSessionHandle) {
+    typedef int32_t(__cdecl* fn_t)(void*, const void*, void**);
+    fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_SessionSearch_CopySearchResultByIndex");
+
+    int32_t result = original(Handle, Options, OutSessionHandle);
+    LogText("EOS_SessionSearch_CopySearchResultByIndex | index %u -> result %d",
+            Options ? Options->SessionIndex : 0, result);
+    return result;
+}
+
+// The first fields of EOS_SessionDetails_Info have been the same since v1, and
+// only these are read. Later versions append to the end.
+typedef struct {
+    int32_t     ApiVersion;
+    const char* SessionId;
+    const char* HostAddress;
+    uint32_t    NumOpenPublicConnections;
+} EOS_SessionDetails_Info;
+
+// Where the session says the server actually lives. If a join dies for want of
+// an address, this is the line that shows it.
+extern __declspec(dllexport) int32_t EOS_SessionDetails_CopyInfo(
+        void* Handle, const void* Options, EOS_SessionDetails_Info** OutSessionInfo) {
+    typedef int32_t(__cdecl* fn_t)(void*, const void*, EOS_SessionDetails_Info**);
+    fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_SessionDetails_CopyInfo");
+
+    int32_t result = original(Handle, Options, OutSessionInfo);
+    if (result == 0 && OutSessionInfo && *OutSessionInfo) {
+        const EOS_SessionDetails_Info* info = *OutSessionInfo;
+        LogText("EOS_SessionDetails_CopyInfo | SessionId: %s  HostAddress: %s  open slots: %u",
+                info->SessionId   ? info->SessionId   : "(null)",
+                info->HostAddress ? info->HostAddress : "(null)",
+                info->NumOpenPublicConnections);
+    } else {
+        LogText("EOS_SessionDetails_CopyInfo | result %d", result);
+    }
+    return result;
+}
+
+// JoinSession answers through a callback, so the result only shows up if the
+// game's own callback is stood in for. The Options layout has moved between
+// API versions, so nothing in it is read - the version number says which one
+// the game is on, and the answer is what matters.
+typedef struct {
+    int32_t ResultCode;
+    void*   ClientData;
+} EOS_Sessions_JoinSessionCallbackInfo;
+
+static void EOS_Sessions_JoinSession_callback(EOS_Sessions_JoinSessionCallbackInfo* Info) {
+    OriginalCallback* game = Info->ClientData;
+    LogText("EOS_Sessions_JoinSession | ResultCode %d", Info->ResultCode);
+
+    typedef void(__cdecl* fn_t)(void*);
+    fn_t actualCallback = (fn_t) game->func;
+    Info->ClientData = game->data;
+    free(game);
+    if (actualCallback) actualCallback(Info);
+}
+
+extern __declspec(dllexport) void EOS_Sessions_JoinSession(
+        void* Handle, const void* Options, void* ClientData, void* CompletionDelegate) {
+    LogText("EOS_Sessions_JoinSession | called, Options ApiVersion %d",
+            Options ? *(const int32_t*) Options : -1);
+
+    typedef void(__cdecl* fn_t)(void*, const void*, void*, void*);
+    fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_Sessions_JoinSession");
+
+    OriginalCallback* game = malloc(sizeof(OriginalCallback));
+    if (!game) {                       // nothing to log with, so stay out of it
+        original(Handle, Options, ClientData, CompletionDelegate);
+        return;
+    }
+    game->func = CompletionDelegate;
+    game->data = ClientData;
+    original(Handle, Options, game, (void*) &EOS_Sessions_JoinSession_callback);
+}
+
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
     switch (reason) {
 
@@ -1004,8 +1103,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
         // Names what this build takes over, so a log with no line from one of
         // these says the call never came, not that the hook is missing.
         LogText("Hooks: Connect_Login, SessionSearch_SetSessionId/"
-                "GetSearchResultCount, AntiCheatClient_BeginSession/EndSession/"
-                "PollStatus/ProtectMessage, matchmaker relay");
+                "GetSearchResultCount/CopySearchResultByIndex, "
+                "SessionDetails_CopyInfo, Sessions_JoinSession, "
+                "AntiCheatClient_BeginSession/EndSession/PollStatus/"
+                "ProtectMessage, matchmaker relay");
 
         // Add the folder with this DLL to DLL search path
         char path[1024];
