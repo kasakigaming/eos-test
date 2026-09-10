@@ -182,6 +182,35 @@ Online; the Official filter stays empty. Community servers were never affected e
 
 `EOS_PROXY_NO_WARP=1` in the environment leaves the game's own request alone.
 
+## Anti-cheat
+
+Once a join resolves to a real address, the net driver is the next thing to stop it. Redpoint's
+driver calls `EOS_AntiCheatClient_BeginSession` before it opens the connection and treats a
+failure as fatal:
+
+```
+LogRedpointEOSAntiCheat: Error: Game Anti-Cheat: CreateSession(...): Unable to begin game
+  session (got result EOS_NoConnection).
+LogRedpointEOSNetworking: Error: Net driver failed to set up Anti-Cheat session.
+LogNet: Warning: error initializing the network stack
+```
+
+It fails because the anti-cheat client is not running, and it cannot be: the game's own launcher
+is the anti-cheat bootstrapper, and the installer has to replace it because EAC will not map an
+unsigned EOS SDK into the process it protects. `BeginSession` is where those two requirements
+meet, so the proxy answers it: the call still goes to the real SDK, and a failure is reported to
+the game as success. The rest of the anti-cheat client surface is passed through untouched and
+only logged.
+
+Be blunt about what that is and is not. **Nothing is defeated outside this process.** A server
+running the server half of anti-cheat still sees a client that never registered, and is free to
+refuse it or drop it later. What changes is only that the client stops halting itself before it
+ever finds out.
+
+`EOS_PROXY_NO_ANTICHEAT=1` leaves `BeginSession` alone, which is how you tell this failure apart
+from a later one.
+
+
 
 # Building
 

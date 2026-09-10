@@ -27,10 +27,13 @@ SLSCONF  RCDATA "slssteam-config.yaml"
 // t39 - the whole matchmaker is relayed, not just the status call: the server
 // browser fills, and a refused /v1/match/request is answered locally with the
 // server id as the session id so joining has a path to try.
+// t49 - EOS_AntiCheatClient_BeginSession is answered as success, so the net
+// driver stops refusing to bring the connection up on a machine where the
+// anti-cheat client cannot run. Nothing is defeated outside this process.
 // SETUP_VERSION in setup.c prints the same thing at runtime.
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     1,5,0,0
-PRODUCTVERSION  1,5,0,0
+FILEVERSION     1,6,0,0
+PRODUCTVERSION  1,6,0,0
 FILEOS          VOS_NT_WINDOWS32
 FILETYPE        VFT_APP
 BEGIN
@@ -39,11 +42,11 @@ BEGIN
         BLOCK "040904B0"
         BEGIN
             VALUE "FileDescription", "EOS Proxy Setup"
-            VALUE "FileVersion",     "1.5.0.0"
+            VALUE "FileVersion",     "1.6.0.0"
             VALUE "InternalName",    "eos-proxy-setup"
             VALUE "OriginalFilename","eos-proxy-setup.exe"
             VALUE "ProductName",     "EOS Proxy"
-            VALUE "ProductVersion",  "t39 (test 3, 2026-09-10)"
+            VALUE "ProductVersion",  "t49 (test 4, 2026-09-10)"
             VALUE "Comments",        "The Isle evrima: proxy + gbe_fork + anti-cheat launcher stand-in"
         END
     END
