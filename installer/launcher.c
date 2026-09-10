@@ -21,23 +21,44 @@
 
 #define PATHBUF 1024
 
-// The log categories worth asking for, and a caveat about what asking is worth.
-// This build answers to almost none of them: LogNet, LogNetDriver and
-// LogHandshake have never printed a line at any verbosity, and the net events
-// stock Unreal logs under LogNet come out under the game's own LogGlobalStatus
-// instead. They stay in the list because they cost nothing and would be the
-// first thing to speak up if a build ever restored them.
+// What to ask the game for, and the two things this build needs before it will
+// hear the question at all.
 //
-// The command line is the only route left. A [Core.Log] section in
-// Saved\Config\WindowsClient\Engine.ini does not survive - the game rewrites
-// that file down to a single stanza on every run - and whether the command line
-// itself arrives is not settled either, which is why the proxy logs it from
-// inside the game process. Steam's own launch options still follow ours, so a
-// user setting -LogCmds themselves overrides this.
-#define LOG_CMDS "-LogCmds=\"LogNet Verbose, LogNetDriver Verbose, "                \
+// t99 settled the part that was guesswork. The proxy logs the game's own
+// command line from inside the process, and the whole -LogCmds argument arrives
+// intact, every category, quotes and all. Not one of them answered: no line
+// from LogNet, LogNetDriver, LogHandshake, LogRedpointEOSNetworking or
+// LogRedpointEOSAntiCheat, and no "Log category ... has been raised" from the
+// engine either, through a join that ran its full 73 seconds.
+//
+// The game's executable says why that is worth another try rather than a
+// shrug. It carries an allow list of the arguments a shipping build accepts,
+//
+//   -game -log -unattended -nosplash -RenderOffscreen -d3d12 -nullrhi -NoSound
+//   -NoLoadingScreen -TILoadTest ... -LogCmds -abslog
+//
+// which is The Isle's own list - their load-test switches sit in it - and they
+// put -LogCmds on it deliberately. An allow list has to split the command line
+// into arguments to check them, and -LogCmds="a b, c d" is one argument only to
+// a splitter that honours quotes. So the argument is quoted whole here,
+// "-LogCmds=a b, c d", which is a single token to any splitter at all.
+//
+// -abslog is the control, on the same allow list and needing no quotes of its
+// own. If the file it names appears, the command line is read and only the
+// LogCmds value is being lost; if it does not, the line is dropped wholesale
+// and no quoting will fix it. It is skipped when the path would need quoting
+// too, since a quoted control controls nothing.
+//
+// LogOnlineSession is gone from the list: it logs Verbose in every session,
+// asked for or not, so it can only ever agree. The config route stays closed,
+// the game rewrites Engine.ini down to one stanza on every run. Steam's own
+// launch options still follow ours, so a user setting -LogCmds overrides this.
+#define LOG_CMDS "\"-LogCmds=LogNet Verbose, LogNetDriver Verbose, "                \
                  "LogHandshake Verbose, LogGlobalStatus Verbose, "                  \
-                 "LogMatchmaking Verbose, LogOnlineSession Verbose, "               \
-                 "LogRedpointEOSNetworking Verbose, LogRedpointEOSAntiCheat Verbose\""
+                 "LogMatchmaking Verbose, LogRedpointEOSNetworking Verbose, "       \
+                 "LogRedpointEOSAntiCheat Verbose\""
+
+#define ABSLOG_NAME "eos-proxy-engine.log"
 
 static void Fail(const char* what) {
     char msg[PATHBUF + 256];
@@ -116,6 +137,21 @@ static BOOL ReadSettingsExe(const char* root, char* out, size_t cap) {
     return JsonGetString(buf, got, "executable", out, cap);
 }
 
+// The control probe of the run: an allow-listed argument that needs no quoting,
+// so that a run which produces this file has proved the command line is read.
+// %LOCALAPPDATA% is where the engine already keeps its own logs, and it is the
+// one path here that is normally free of spaces. When it is not, the probe is
+// left out rather than quoted, because a quoted control answers a different
+// question than the one being asked.
+static BOOL AbsLogArg(char* out, size_t cap) {
+    char local[PATHBUF];
+    DWORD n = GetEnvironmentVariableA("LOCALAPPDATA", local, sizeof(local));
+    if (!n || n >= sizeof(local)) return FALSE;
+    if (strchr(local, ' ')) return FALSE;
+    _snprintf_s(out, cap, _TRUNCATE, "-abslog=%s\\" ABSLOG_NAME, local);
+    return TRUE;
+}
+
 // Everything after our own program name, so launch options set in Steam still
 // reach the game.
 static const char* OwnArgs(void) {
@@ -157,10 +193,13 @@ int main(void) {
     char* slash = strrchr(dir, '\\');
     if (slash) *slash = 0;
 
-    char cmd[PATHBUF * 2];
+    char abslog[PATHBUF];
+    if (!AbsLogArg(abslog, sizeof(abslog))) abslog[0] = 0;
+
+    char cmd[PATHBUF * 3];
     const char* args = OwnArgs();
-    _snprintf_s(cmd, sizeof(cmd), _TRUNCATE, "\"%s\" " LOG_CMDS "%s%s",
-                exe, *args ? " " : "", args);
+    _snprintf_s(cmd, sizeof(cmd), _TRUNCATE, "\"%s\" " LOG_CMDS "%s%s%s%s",
+                exe, *abslog ? " " : "", abslog, *args ? " " : "", args);
 
     STARTUPINFOA si = { 0 };
     si.cb = sizeof(si);

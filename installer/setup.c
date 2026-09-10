@@ -27,8 +27,8 @@
 
 // Printed on every run, so a log or a screenshot says which build produced it.
 // Keep it in step with the VERSIONINFO block in setup.rc.
-#define SETUP_VERSION "t99"
-#define SETUP_BUILD   "test 9, 2026-09-11"
+#define SETUP_VERSION "t109"
+#define SETUP_BUILD   "test 10, 2026-09-11"
 
 #define PATHBUF      1024
 #define MAX_TARGETS  128
