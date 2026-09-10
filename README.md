@@ -256,11 +256,12 @@ never varies. Between servers it does:
 ```
 02 00 0b 00 10 5d 00 00 00 00 00 00 00 00 00 00 00 00 00 00 81 64 0c fb
 02 00 0b 00 f9 79 00 00 00 00 00 00 00 00 00 00 00 00 00 00 0c 9c 1d 3b
+02 00 0b 00 83 17 00 00 00 00 00 00 00 00 00 00 00 00 00 00 f2 42 e2 6a
 ```
 
-Four bytes of header, then a two byte value that changes per session, then twelve zeros, then four
-bytes that look like a checksum over the rest. So there is a per-session value in it, and a canned
-reply could not have worked even in principle.
+Three servers, three of them. Four bytes of header, then a two byte value that changes per
+session, then twelve zeros, then four bytes that look like a checksum over the rest. So there is
+a per-session value in it, and a canned reply could not have worked even in principle.
 
 A real client answers through the callback registered with `AddNotifyMessageToServer`, and that
 answer is an attestation the EAC client module produces and Epic's own service verifies. A
