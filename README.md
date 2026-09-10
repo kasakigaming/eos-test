@@ -249,17 +249,30 @@ EOS_AntiCheatClient_ReceiveMessageFromServer | stand-in, message dropped
 EOS_AntiCheatClient_ReceiveMessageFromServer | stand-in, message dropped
 ```
 
-The server sends an anti-cheat challenge, three times, a few seconds apart. A real client would
-answer through the callback registered with `AddNotifyMessageToServer`, and those answers are
-produced by the EAC client module and checked against Epic's own backend. A stand-in has no key
-material and cannot invent one, so it drops them, the server never hears back, and the connection
-times out after about 73 seconds and drops to the menu.
+The server sends an anti-cheat challenge every three seconds. Logging the bytes shows the same 24
+of them every single time, never varying:
 
-**That is the honest limit of this whole approach.** Everything before it works: login, the server
-browser, the matchmaker, the session lookup, the join, the net driver, the connection itself. What
-cannot be done from inside the client is convincing a server that a client Epic never vouched for
-is running the anti-cheat it demands. Only a server that does not run the server half will let
-this in.
+```
+02 00 0b 00 10 5d 00 00 00 00 00 00 00 00 00 00 00 00 00 00 81 64 0c fb
+```
+
+A real client answers through the callback registered with `AddNotifyMessageToServer`, and that
+answer is an attestation the EAC client module produces and Epic's own service verifies. A
+stand-in has no key material and cannot invent one.
+
+That was tested rather than assumed. A build sent the server's own message straight back to it,
+and nothing changed: the server re-sent the identical bytes eight times over 22 seconds, then
+dropped the connection on the same 73 second timeout as silence. A wrong answer is worth exactly
+what no answer is worth, so that code is not kept — only the logging that proved it.
+
+**That is the honest limit of this whole approach, and it is not a bug to be fixed.** Everything
+before it works: login, the server browser, the matchmaker, the session lookup, the join, the net
+driver, the connection itself. Forging the last step is precisely the thing anti-cheat exists to
+prevent, and no amount of work inside the client changes that.
+
+What is left is the server's own configuration. A server that does not run the server half never
+sends that challenge and never waits for it — which in practice means a server you run yourself,
+where anti-cheat is your setting to make. Everything in this repo already works up to that line.
 
 `EOS_PROXY_NO_ANTICHEAT=1` leaves `BeginSession` alone, which is how you tell this failure apart
 from a later one.

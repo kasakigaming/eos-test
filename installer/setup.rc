@@ -42,8 +42,8 @@ SLSCONF  RCDATA "slssteam-config.yaml"
 // against it. Servers running the server half still refuse this.
 // SETUP_VERSION in setup.c prints the same thing at runtime.
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     1,9,0,0
-PRODUCTVERSION  1,9,0,0
+FILEVERSION     1,10,0,0
+PRODUCTVERSION  1,10,0,0
 FILEOS          VOS_NT_WINDOWS32
 FILETYPE        VFT_APP
 BEGIN
@@ -52,11 +52,11 @@ BEGIN
         BLOCK "040904B0"
         BEGIN
             VALUE "FileDescription", "EOS Proxy Setup"
-            VALUE "FileVersion",     "1.9.0.0"
+            VALUE "FileVersion",     "1.10.0.0"
             VALUE "InternalName",    "eos-proxy-setup"
             VALUE "OriginalFilename","eos-proxy-setup.exe"
             VALUE "ProductName",     "EOS Proxy"
-            VALUE "ProductVersion",  "t79 (test 7, 2026-09-10)"
+            VALUE "ProductVersion",  "t89 (test 8, 2026-09-10)"
             VALUE "Comments",        "The Isle evrima: proxy + gbe_fork + anti-cheat launcher stand-in"
         END
     END

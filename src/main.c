@@ -685,8 +685,8 @@ static HMODULE g_hOrig = NULL;
 // actually loaded. A stale DLL left in a game folder by an older installer is
 // otherwise indistinguishable from a hook that never fired. Keep it in step
 // with SETUP_VERSION in installer\setup.c.
-#define PROXY_VERSION "t79"
-#define PROXY_BUILD   "test 7, 2026-09-10"
+#define PROXY_VERSION "t89"
+#define PROXY_BUILD   "test 8, 2026-09-10"
 
 // -------- EOS Structs ------------------------
 
@@ -907,6 +907,32 @@ static uint64_t AntiCheat_NextNotifyId(void) {
     return g_AntiCheatNotifyId++;
 }
 
+// The game registers a callback here to learn when the anti-cheat client wants
+// something sent to the server, and relays whatever it is handed over the
+// connection. A real client answers the server's challenge through it. The
+// stand-in registers, holds the callback, and never fires it, because it has
+// nothing genuine to send.
+//
+// That is not an oversight, it is the end of the road. What the server wants
+// back is an attestation the EAC client module produces and Epic's own service
+// verifies, and inventing one is the single thing anti-cheat exists to stop.
+// It was worth proving rather than assuming, so a build did send the server's
+// own message straight back to it: the server re-sent the identical 24 bytes
+// every three seconds regardless, eight times, then dropped the connection on
+// the same 73 second timeout as silence. A wrong answer is worth exactly as
+// much as none, so that experiment is not kept.
+typedef struct {
+    void*       ClientData;
+    const void* MessageData;
+    uint32_t    MessageDataSizeBytes;
+} EOS_AntiCheatClient_OnMessageToServerCallbackInfo;
+
+typedef void (__cdecl* AntiCheat_MessageToServerFn)(
+        const EOS_AntiCheatClient_OnMessageToServerCallbackInfo*);
+
+static AntiCheat_MessageToServerFn g_MessageToServerFn = NULL;
+static void* g_MessageToServerData = NULL;
+
 // Both message protection option structs start the same way, and these three
 // fields are all that a straight copy needs.
 typedef struct {
@@ -1025,12 +1051,35 @@ extern __declspec(dllexport) int32_t EOS_AntiCheatClient_ReceiveMessageFromPeer(
     return original(Handle, Options);
 }
 
+// What the server actually sends. The stand-in cannot answer it, but it can at
+// least say what it is: the size and the first bytes tell an EAC handshake
+// blob apart from a retry of one message, and say whether the three that
+// arrive are the same challenge sent three times or a sequence.
+typedef struct {
+    int32_t     ApiVersion;
+    uint32_t    DataLengthBytes;
+    const void* Data;
+} EOS_AntiCheatClient_ReceiveMessageFromServerOptions;
+
+static void AntiCheat_LogMessage(const char* what, const void* data, uint32_t len) {
+    char hex[3 * 32 + 8];
+    const unsigned char* p = (const unsigned char*) data;
+    uint32_t show = len < 32 ? len : 32;
+    size_t o = 0;
+    for (uint32_t i = 0; i < show && o + 3 < sizeof(hex); i++)
+        o += (size_t) _snprintf_s(hex + o, sizeof(hex) - o, _TRUNCATE, "%02x ", p[i]);
+    hex[o] = 0;
+    LogText("%s | %u bytes: %s%s", what, len, hex, len > show ? "..." : "");
+}
+
 extern __declspec(dllexport) int32_t EOS_AntiCheatClient_ReceiveMessageFromServer(void* Handle, const void* Options) {
     if (IS_STANDIN(Handle)) {
-        static int budget = 3;
-        if (budget > 0) {
+        const EOS_AntiCheatClient_ReceiveMessageFromServerOptions* opts = Options;
+        static int budget = 8;
+        if (budget > 0 && opts && opts->Data) {
             budget--;
-            LogText("EOS_AntiCheatClient_ReceiveMessageFromServer | stand-in, message dropped");
+            AntiCheat_LogMessage("EOS_AntiCheatClient_ReceiveMessageFromServer",
+                                 opts->Data, opts->DataLengthBytes);
         }
         return EOS_RESULT_SUCCESS;
     }
@@ -1138,7 +1187,20 @@ extern __declspec(dllexport) int32_t EOS_AntiCheatClient_UnprotectMessage(
 
 ANTICHEAT_ADD_NOTIFY(AddNotifyClientIntegrityViolated)
 ANTICHEAT_ADD_NOTIFY(AddNotifyMessageToPeer)
-ANTICHEAT_ADD_NOTIFY(AddNotifyMessageToServer)
+// Registered by hand rather than through the macro, because this is the one
+// whose callback the stand-in keeps hold of.
+extern __declspec(dllexport) uint64_t EOS_AntiCheatClient_AddNotifyMessageToServer(
+        void* Handle, const void* Options, void* ClientData, void* NotificationFn) {
+    if (IS_STANDIN(Handle)) {
+        g_MessageToServerFn = (AntiCheat_MessageToServerFn) NotificationFn;
+        g_MessageToServerData = ClientData;
+        LogText("EOS_AntiCheatClient_AddNotifyMessageToServer | stand-in holds the callback");
+        return AntiCheat_NextNotifyId();
+    }
+    typedef uint64_t(__cdecl* fn_t)(void*, const void*, void*, void*);
+    fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_AntiCheatClient_AddNotifyMessageToServer");
+    return original(Handle, Options, ClientData, NotificationFn);
+}
 ANTICHEAT_ADD_NOTIFY(AddNotifyPeerActionRequired)
 ANTICHEAT_ADD_NOTIFY(AddNotifyPeerAuthStatusChanged)
 
