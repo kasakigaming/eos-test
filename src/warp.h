@@ -37,6 +37,13 @@
 //                       answer, including a real MAINTENANCE or UPDATING
 //                       state, is passed through untouched.
 //
+//   /v1/match/request   a refused ticket is answered locally with the server
+//                       id the client asked about, used as the session id, on
+//                       the guess that the matchmaker's server id and the EOS
+//                       session id are the same string. The session search
+//                       that follows says whether the guess holds - see
+//                       EOS_SessionSearch_SetSessionId in main.c.
+//
 // The official servers themselves stay out of reach: listing them, matchmaking
 // into one and queueing all validate the same ticket, and there is no answer
 // to those that can be invented locally.

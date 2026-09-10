@@ -158,29 +158,41 @@ I've only tested this with a few games.
 ## The Isle: "Official Network Status: Offline"
 
 EOS gets the game online, but The Isle also talks to its own matchmaker at
-`api.warphosting.com.au`, and that is a separate wall. Every call there carries a Steam ticket
-which the matchmaker hands to Valve for validation, and no emulator can produce a ticket Valve
-will sign off on:
+`api.warphosting.com.au`, and that is a separate wall. Most calls there carry a Steam ticket which
+the matchmaker hands to Valve for validation, and no emulator can produce a ticket Valve will sign
+off on:
 
 | endpoint | ticket | what it is |
 |---|---|---|
 | `POST /v1/servers/community` | not required | the community server list. This is the one that fills the browser, which is why 900-odd servers show up while the status line says the network is down |
 | `POST /v1/servers/status` | required, `401 Steam ticket invalid` | the official network state, `ONLINE` / `OFFLINE` / `UPDATING` / `MAINTENANCE`. The 401 is what paints the menu line red |
-| `POST /v1/servers/active` | required | the official server list |
-| `POST /v1/match/request`, `POST /v1/servers/queue/join` | required | joining and queueing for an official server |
+| `POST /v1/servers/active` | not required for the unverified set | the official server list. Asked for that way it answers without a ticket at all |
+| `POST /v1/servers/queue/join` | not required | answers `200` with the address and queue port of the server you picked |
+| `POST /v1/match/request` | required, `401 Steam ticket invalid` | turns the server you picked into an EOS session id to look up and join. This is where a join stops |
 
-`src\warp.h` deals with the status line only. The URL is a plain ASCII literal in the game
-executable, so the proxy rewrites it in memory to a loopback address it listens on, forwards the
-request to the real matchmaker unchanged, passes the answer straight back whenever there is one,
-and substitutes `ONLINE` only when the matchmaker refuses the ticket. A genuine ticket, and any
-genuine `MAINTENANCE` or `UPDATING` state, still wins.
+`src\warp.h` handles the whole matchmaker, not the status call alone. Every one of those URLs is a
+plain ASCII literal in the game executable, so the proxy rewrites them in memory to a loopback
+address it listens on, relays each request to the real matchmaker with its method, path, headers
+and body intact, and passes the answer straight back. By default nothing about the game's
+behaviour changes. What it buys is a line in `epic_proxy.log` for every call the client makes and
+every answer it is given, which is the only way to see where a join actually dies.
 
-That is the whole of it, and it is worth being blunt about the limit: **the official servers
-themselves stay out of reach**. Listing them, matchmaking into one and queueing all validate the
-same ticket, and there is no answer to those that can be invented locally. The status line reads
-Online; the Official filter stays empty. Community servers were never affected either way.
+Two calls are answered locally instead, and only when the matchmaker refuses the ticket:
 
-`EOS_PROXY_NO_WARP=1` in the environment leaves the game's own request alone.
+- `/v1/servers/status` is reported as `ONLINE`, so the menu stops printing the official network as
+  offline. A genuine ticket, and any genuine `MAINTENANCE` or `UPDATING` state, still wins.
+- `/v1/match/request` is answered with the server id the client asked about, reused as the session
+  id. That rests on a guess: that the matchmaker's server id and the EOS session id are the same
+  string, both being 32 hex characters the server registers from the same place.
+  `EOS_SessionSearch_SetSessionId` in `src\main.c` logs what the client then goes looking for and
+  how many sessions come back, which is how you find out whether the guess holds.
+
+Worth being blunt about the limit: **nothing here produces a ticket Valve would sign**. The status
+line reads Online and the browser fills, but a session id that does not exist cannot be invented,
+and an official server is free to refuse a client the matchmaker never vouched for. Community
+servers were never affected either way.
+
+`EOS_PROXY_NO_WARP=1` in the environment leaves the game's own requests alone.
 
 ## Anti-cheat
 
