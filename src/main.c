@@ -681,6 +681,13 @@
 
 static HMODULE g_hOrig = NULL;
 
+// Printed as the first line of every log, so a log says which proxy the game
+// actually loaded. A stale DLL left in a game folder by an older installer is
+// otherwise indistinguishable from a hook that never fired. Keep it in step
+// with SETUP_VERSION in installer\setup.c.
+#define PROXY_VERSION "t49"
+#define PROXY_BUILD   "test 4, 2026-09-10"
+
 // -------- EOS Structs ------------------------
 
 typedef struct {
@@ -993,6 +1000,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
     case DLL_PROCESS_ATTACH:
         DisableThreadLibraryCalls(hModule);
         InitLog("epic");
+        LogText("EOS proxy " PROXY_VERSION " (" PROXY_BUILD ")");
+        // Names what this build takes over, so a log with no line from one of
+        // these says the call never came, not that the hook is missing.
+        LogText("Hooks: Connect_Login, SessionSearch_SetSessionId/"
+                "GetSearchResultCount, AntiCheatClient_BeginSession/EndSession/"
+                "PollStatus/ProtectMessage, matchmaker relay");
 
         // Add the folder with this DLL to DLL search path
         char path[1024];
