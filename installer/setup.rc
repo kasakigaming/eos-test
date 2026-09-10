@@ -24,10 +24,13 @@ SLSCONF  RCDATA "slssteam-config.yaml"
 // anti-cheat bootstrapper replaced so the proxy is allowed to load at all.
 // t29 - the proxy also answers the game's official network status request, so
 // the main menu stops reporting the network as offline. See src\warp.h.
+// t39 - the whole matchmaker is relayed, not just the status call: the server
+// browser fills, and a refused /v1/match/request is answered locally with the
+// server id as the session id so joining has a path to try.
 // SETUP_VERSION in setup.c prints the same thing at runtime.
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     1,4,0,0
-PRODUCTVERSION  1,4,0,0
+FILEVERSION     1,5,0,0
+PRODUCTVERSION  1,5,0,0
 FILEOS          VOS_NT_WINDOWS32
 FILETYPE        VFT_APP
 BEGIN
@@ -36,11 +39,11 @@ BEGIN
         BLOCK "040904B0"
         BEGIN
             VALUE "FileDescription", "EOS Proxy Setup"
-            VALUE "FileVersion",     "1.4.0.0"
+            VALUE "FileVersion",     "1.5.0.0"
             VALUE "InternalName",    "eos-proxy-setup"
             VALUE "OriginalFilename","eos-proxy-setup.exe"
             VALUE "ProductName",     "EOS Proxy"
-            VALUE "ProductVersion",  "t29 (test 2, 2026-09-09)"
+            VALUE "ProductVersion",  "t39 (test 3, 2026-09-10)"
             VALUE "Comments",        "The Isle evrima: proxy + gbe_fork + anti-cheat launcher stand-in"
         END
     END
