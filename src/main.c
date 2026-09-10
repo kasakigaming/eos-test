@@ -395,7 +395,7 @@
 #pragma comment(linker, "/export:EOS_Platform_GetAchievementsInterface=" ORIGINAL_DLL ".EOS_Platform_GetAchievementsInterface,@399")
 #pragma comment(linker, "/export:EOS_Platform_GetActiveCountryCode=" ORIGINAL_DLL ".EOS_Platform_GetActiveCountryCode,@400")
 #pragma comment(linker, "/export:EOS_Platform_GetActiveLocaleCode=" ORIGINAL_DLL ".EOS_Platform_GetActiveLocaleCode,@401")
-#pragma comment(linker, "/export:EOS_Platform_GetAntiCheatClientInterface=" ORIGINAL_DLL ".EOS_Platform_GetAntiCheatClientInterface,@402")
+// #pragma comment(linker, "/export:EOS_Platform_GetAntiCheatClientInterface=" ORIGINAL_DLL ".EOS_Platform_GetAntiCheatClientInterface,@402")
 #pragma comment(linker, "/export:EOS_Platform_GetAntiCheatServerInterface=" ORIGINAL_DLL ".EOS_Platform_GetAntiCheatServerInterface,@403")
 #pragma comment(linker, "/export:EOS_Platform_GetApplicationStatus=" ORIGINAL_DLL ".EOS_Platform_GetApplicationStatus,@404")
 #pragma comment(linker, "/export:EOS_Platform_GetAuthInterface=" ORIGINAL_DLL ".EOS_Platform_GetAuthInterface,@405")
@@ -685,8 +685,8 @@ static HMODULE g_hOrig = NULL;
 // actually loaded. A stale DLL left in a game folder by an older installer is
 // otherwise indistinguishable from a hook that never fired. Keep it in step
 // with SETUP_VERSION in installer\setup.c.
-#define PROXY_VERSION "t59"
-#define PROXY_BUILD   "test 5, 2026-09-10"
+#define PROXY_VERSION "t69"
+#define PROXY_BUILD   "test 6, 2026-09-10"
 
 // -------- EOS Structs ------------------------
 
@@ -862,8 +862,42 @@ extern __declspec(dllexport) void EOS_Connect_Login(void* Handle, EOS_Connect_Lo
 //
 // EOS_PROXY_NO_ANTICHEAT=1 leaves BeginSession alone, for telling this failure
 // apart from a later one.
+//
+// t69: on a t59 run BeginSession was never called at all. The join got further
+// than it ever had - the session was found, JoinSession answered 0, and the
+// engine started travelling to the address the session carried - and then:
+//
+//   LogGlobalStatus: UEngine::Browse Started Browse: "173.225.107.226/Game/..."
+//   LogGlobalStatus: Warning: BroadcastTravelFailure ... PendingNetGameCreateFailure,
+//     reason: "Error initializing network layer."
+//
+// 21 ms apart, with no anti-cheat line of any kind. That failure is raised when
+// UPendingNetGame comes out of InitNetDriver with no net driver, which happens
+// either because the driver could not be created or because InitConnect failed
+// and destroyed it. BeginSession sits inside InitConnect, so something ahead of
+// it is now giving up first.
+//
+// The getter below is hooked to narrow that down. If the driver asks for the
+// anti-cheat interface and gets NULL back, the driver would fail exactly this
+// quietly, and BeginSession would never be reached no matter what it answers.
 
 static int g_AntiCheatPassThrough = -1;      // -1 until the environment is read
+
+// Handing back NULL here is a failure the net driver never explains. Printed
+// once, since the driver asks for it on every connection attempt.
+extern __declspec(dllexport) void* EOS_Platform_GetAntiCheatClientInterface(void* Handle) {
+    typedef void*(__cdecl* fn_t)(void*);
+    fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_Platform_GetAntiCheatClientInterface");
+
+    void* iface = original(Handle);
+    static int logged = 0;
+    if (!logged) {
+        logged = 1;
+        LogText("EOS_Platform_GetAntiCheatClientInterface | %s",
+                iface ? "handle returned" : "NULL - the client half is not available");
+    }
+    return iface;
+}
 
 static int AntiCheat_PassThrough(void) {
     if (g_AntiCheatPassThrough < 0) {
@@ -1105,6 +1139,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
         LogText("Hooks: Connect_Login, SessionSearch_SetSessionId/"
                 "GetSearchResultCount/CopySearchResultByIndex, "
                 "SessionDetails_CopyInfo, Sessions_JoinSession, "
+                "Platform_GetAntiCheatClientInterface, "
                 "AntiCheatClient_BeginSession/EndSession/PollStatus/"
                 "ProtectMessage, matchmaker relay");
 
