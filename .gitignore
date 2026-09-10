@@ -1,7 +1,7 @@
 # Build output
 build/
 EOSSDK-Win64-Shipping.dll
-eos-proxy-setup.exe
+eos-proxy-setup*.exe
 
 # MSVC intermediates
 *.obj

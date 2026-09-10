@@ -21,6 +21,15 @@
 
 #define PATHBUF 1024
 
+// The log categories that say why a net driver refuses to start. They belong on
+// the command line rather than in a config file: the game rewrites its own
+// Saved\Config\WindowsClient\Engine.ini on every run, so a [Core.Log] section
+// added there is gone by the time it would be read. Steam's own launch options
+// still follow ours, so a user setting -LogCmds themselves overrides this.
+#define LOG_CMDS "-LogCmds=\"LogNet Verbose, LogNetDriver Verbose, "                \
+                 "LogHandshake Verbose, LogOnlineSession Verbose, "                 \
+                 "LogRedpointEOSNetworking Verbose, LogRedpointEOSAntiCheat Verbose\""
+
 static void Fail(const char* what) {
     char msg[PATHBUF + 256];
     _snprintf_s(msg, sizeof(msg), _TRUNCATE,
@@ -141,7 +150,8 @@ int main(void) {
 
     char cmd[PATHBUF * 2];
     const char* args = OwnArgs();
-    _snprintf_s(cmd, sizeof(cmd), _TRUNCATE, "\"%s\"%s%s", exe, *args ? " " : "", args);
+    _snprintf_s(cmd, sizeof(cmd), _TRUNCATE, "\"%s\" " LOG_CMDS "%s%s",
+                exe, *args ? " " : "", args);
 
     STARTUPINFOA si = { 0 };
     si.cb = sizeof(si);
