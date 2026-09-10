@@ -1,4 +1,4 @@
-#define ORIGINAL_DLL "EOSSDK-Win64-Shipping.yes"
+﻿#define ORIGINAL_DLL "EOSSDK-Win64-Shipping.yes"
 
 #pragma comment(linker, "/export:EOS_Achievements_AddNotifyAchievementsUnlocked=" ORIGINAL_DLL ".EOS_Achievements_AddNotifyAchievementsUnlocked,@1")
 #pragma comment(linker, "/export:EOS_Achievements_AddNotifyAchievementsUnlockedV2=" ORIGINAL_DLL ".EOS_Achievements_AddNotifyAchievementsUnlockedV2,@2")
@@ -26,27 +26,27 @@
 #pragma comment(linker, "/export:EOS_ActiveSession_GetRegisteredPlayerCount=" ORIGINAL_DLL ".EOS_ActiveSession_GetRegisteredPlayerCount,@24")
 #pragma comment(linker, "/export:EOS_ActiveSession_Info_Release=" ORIGINAL_DLL ".EOS_ActiveSession_Info_Release,@25")
 #pragma comment(linker, "/export:EOS_ActiveSession_Release=" ORIGINAL_DLL ".EOS_ActiveSession_Release,@26")
-#pragma comment(linker, "/export:EOS_AntiCheatClient_AddExternalIntegrityCatalog=" ORIGINAL_DLL ".EOS_AntiCheatClient_AddExternalIntegrityCatalog,@27")
-#pragma comment(linker, "/export:EOS_AntiCheatClient_AddNotifyClientIntegrityViolated=" ORIGINAL_DLL ".EOS_AntiCheatClient_AddNotifyClientIntegrityViolated,@28")
-#pragma comment(linker, "/export:EOS_AntiCheatClient_AddNotifyMessageToPeer=" ORIGINAL_DLL ".EOS_AntiCheatClient_AddNotifyMessageToPeer,@29")
-#pragma comment(linker, "/export:EOS_AntiCheatClient_AddNotifyMessageToServer=" ORIGINAL_DLL ".EOS_AntiCheatClient_AddNotifyMessageToServer,@30")
-#pragma comment(linker, "/export:EOS_AntiCheatClient_AddNotifyPeerActionRequired=" ORIGINAL_DLL ".EOS_AntiCheatClient_AddNotifyPeerActionRequired,@31")
-#pragma comment(linker, "/export:EOS_AntiCheatClient_AddNotifyPeerAuthStatusChanged=" ORIGINAL_DLL ".EOS_AntiCheatClient_AddNotifyPeerAuthStatusChanged,@32")
+// #pragma comment(linker, "/export:EOS_AntiCheatClient_AddExternalIntegrityCatalog=" ORIGINAL_DLL ".EOS_AntiCheatClient_AddExternalIntegrityCatalog,@27")
+// #pragma comment(linker, "/export:EOS_AntiCheatClient_AddNotifyClientIntegrityViolated=" ORIGINAL_DLL ".EOS_AntiCheatClient_AddNotifyClientIntegrityViolated,@28")
+// #pragma comment(linker, "/export:EOS_AntiCheatClient_AddNotifyMessageToPeer=" ORIGINAL_DLL ".EOS_AntiCheatClient_AddNotifyMessageToPeer,@29")
+// #pragma comment(linker, "/export:EOS_AntiCheatClient_AddNotifyMessageToServer=" ORIGINAL_DLL ".EOS_AntiCheatClient_AddNotifyMessageToServer,@30")
+// #pragma comment(linker, "/export:EOS_AntiCheatClient_AddNotifyPeerActionRequired=" ORIGINAL_DLL ".EOS_AntiCheatClient_AddNotifyPeerActionRequired,@31")
+// #pragma comment(linker, "/export:EOS_AntiCheatClient_AddNotifyPeerAuthStatusChanged=" ORIGINAL_DLL ".EOS_AntiCheatClient_AddNotifyPeerAuthStatusChanged,@32")
 // #pragma comment(linker, "/export:EOS_AntiCheatClient_BeginSession=" ORIGINAL_DLL ".EOS_AntiCheatClient_BeginSession,@33")
 // #pragma comment(linker, "/export:EOS_AntiCheatClient_EndSession=" ORIGINAL_DLL ".EOS_AntiCheatClient_EndSession,@34")
 // #pragma comment(linker, "/export:EOS_AntiCheatClient_GetProtectMessageOutputLength=" ORIGINAL_DLL ".EOS_AntiCheatClient_GetProtectMessageOutputLength,@35")
 // #pragma comment(linker, "/export:EOS_AntiCheatClient_PollStatus=" ORIGINAL_DLL ".EOS_AntiCheatClient_PollStatus,@36")
 // #pragma comment(linker, "/export:EOS_AntiCheatClient_ProtectMessage=" ORIGINAL_DLL ".EOS_AntiCheatClient_ProtectMessage,@37")
-#pragma comment(linker, "/export:EOS_AntiCheatClient_ReceiveMessageFromPeer=" ORIGINAL_DLL ".EOS_AntiCheatClient_ReceiveMessageFromPeer,@38")
-#pragma comment(linker, "/export:EOS_AntiCheatClient_ReceiveMessageFromServer=" ORIGINAL_DLL ".EOS_AntiCheatClient_ReceiveMessageFromServer,@39")
-#pragma comment(linker, "/export:EOS_AntiCheatClient_RegisterPeer=" ORIGINAL_DLL ".EOS_AntiCheatClient_RegisterPeer,@40")
-#pragma comment(linker, "/export:EOS_AntiCheatClient_RemoveNotifyClientIntegrityViolated=" ORIGINAL_DLL ".EOS_AntiCheatClient_RemoveNotifyClientIntegrityViolated,@41")
-#pragma comment(linker, "/export:EOS_AntiCheatClient_RemoveNotifyMessageToPeer=" ORIGINAL_DLL ".EOS_AntiCheatClient_RemoveNotifyMessageToPeer,@42")
-#pragma comment(linker, "/export:EOS_AntiCheatClient_RemoveNotifyMessageToServer=" ORIGINAL_DLL ".EOS_AntiCheatClient_RemoveNotifyMessageToServer,@43")
-#pragma comment(linker, "/export:EOS_AntiCheatClient_RemoveNotifyPeerActionRequired=" ORIGINAL_DLL ".EOS_AntiCheatClient_RemoveNotifyPeerActionRequired,@44")
-#pragma comment(linker, "/export:EOS_AntiCheatClient_RemoveNotifyPeerAuthStatusChanged=" ORIGINAL_DLL ".EOS_AntiCheatClient_RemoveNotifyPeerAuthStatusChanged,@45")
+// #pragma comment(linker, "/export:EOS_AntiCheatClient_ReceiveMessageFromPeer=" ORIGINAL_DLL ".EOS_AntiCheatClient_ReceiveMessageFromPeer,@38")
+// #pragma comment(linker, "/export:EOS_AntiCheatClient_ReceiveMessageFromServer=" ORIGINAL_DLL ".EOS_AntiCheatClient_ReceiveMessageFromServer,@39")
+// #pragma comment(linker, "/export:EOS_AntiCheatClient_RegisterPeer=" ORIGINAL_DLL ".EOS_AntiCheatClient_RegisterPeer,@40")
+// #pragma comment(linker, "/export:EOS_AntiCheatClient_RemoveNotifyClientIntegrityViolated=" ORIGINAL_DLL ".EOS_AntiCheatClient_RemoveNotifyClientIntegrityViolated,@41")
+// #pragma comment(linker, "/export:EOS_AntiCheatClient_RemoveNotifyMessageToPeer=" ORIGINAL_DLL ".EOS_AntiCheatClient_RemoveNotifyMessageToPeer,@42")
+// #pragma comment(linker, "/export:EOS_AntiCheatClient_RemoveNotifyMessageToServer=" ORIGINAL_DLL ".EOS_AntiCheatClient_RemoveNotifyMessageToServer,@43")
+// #pragma comment(linker, "/export:EOS_AntiCheatClient_RemoveNotifyPeerActionRequired=" ORIGINAL_DLL ".EOS_AntiCheatClient_RemoveNotifyPeerActionRequired,@44")
+// #pragma comment(linker, "/export:EOS_AntiCheatClient_RemoveNotifyPeerAuthStatusChanged=" ORIGINAL_DLL ".EOS_AntiCheatClient_RemoveNotifyPeerAuthStatusChanged,@45")
 // #pragma comment(linker, "/export:EOS_AntiCheatClient_UnprotectMessage=" ORIGINAL_DLL ".EOS_AntiCheatClient_UnprotectMessage,@46")
-#pragma comment(linker, "/export:EOS_AntiCheatClient_UnregisterPeer=" ORIGINAL_DLL ".EOS_AntiCheatClient_UnregisterPeer,@47")
+// #pragma comment(linker, "/export:EOS_AntiCheatClient_UnregisterPeer=" ORIGINAL_DLL ".EOS_AntiCheatClient_UnregisterPeer,@47")
 #pragma comment(linker, "/export:EOS_AntiCheatServer_AddNotifyClientActionRequired=" ORIGINAL_DLL ".EOS_AntiCheatServer_AddNotifyClientActionRequired,@48")
 #pragma comment(linker, "/export:EOS_AntiCheatServer_AddNotifyClientAuthStatusChanged=" ORIGINAL_DLL ".EOS_AntiCheatServer_AddNotifyClientAuthStatusChanged,@49")
 #pragma comment(linker, "/export:EOS_AntiCheatServer_AddNotifyMessageToClient=" ORIGINAL_DLL ".EOS_AntiCheatServer_AddNotifyMessageToClient,@50")
@@ -685,8 +685,8 @@ static HMODULE g_hOrig = NULL;
 // actually loaded. A stale DLL left in a game folder by an older installer is
 // otherwise indistinguishable from a hook that never fired. Keep it in step
 // with SETUP_VERSION in installer\setup.c.
-#define PROXY_VERSION "t69"
-#define PROXY_BUILD   "test 6, 2026-09-10"
+#define PROXY_VERSION "t79"
+#define PROXY_BUILD   "test 7, 2026-09-10"
 
 // -------- EOS Structs ------------------------
 
@@ -835,106 +835,160 @@ extern __declspec(dllexport) void EOS_Connect_Login(void* Handle, EOS_Connect_Lo
 
 // The last thing standing between the client and a community server.
 //
-// Connect now resolves all the way to a real address, and then the net driver
-// refuses to bring the connection up:
+// A run of t69 with the engine's own log turned up settled what this is. The
+// join itself works: the session is found, JoinSession answers 0, and the
+// engine travels to the address the session carries. Then, 30 ms later:
 //
-//   LogRedpointEOSAntiCheat: Error: Game Anti-Cheat: CreateSession(...):
-//     Unable to begin game session (got result EOS_NoConnection).
-//   LogRedpointEOSNetworking: Error: Net driver failed to set up Anti-Cheat session.
-//   LogNet: Warning: error initializing the network stack
-//
-// URedpointEOSNetDriver calls EOS_AntiCheatClient_BeginSession before it opens
-// the connection and treats a failure as fatal. It fails because the anti-cheat
-// client is not running: the game's own launcher is the anti-cheat bootstrapper
-// and the installer has to replace it, since EAC will not map an unsigned EOS
-// SDK into the process it protects. One cannot be had without giving up the
-// other, and BeginSession is where the two meet.
-//
-// So it is answered here. BeginSession reports success whether or not the real
-// SDK could start a session, which is enough for the net driver to carry on.
-// Everything else is passed through to the real SDK and only logged, because
-// what the driver does after this is the next thing worth knowing.
-//
-// This does not defeat anti-cheat anywhere but in this process. A server that
-// runs the server side of it still sees a client that never registered and is
-// free to refuse or drop the connection. It does mean the client no longer
-// stops itself before it ever gets to find out.
-//
-// EOS_PROXY_NO_ANTICHEAT=1 leaves BeginSession alone, for telling this failure
-// apart from a later one.
-//
-// t69: on a t59 run BeginSession was never called at all. The join got further
-// than it ever had - the session was found, JoinSession answered 0, and the
-// engine started travelling to the address the session carried - and then:
-//
-//   LogGlobalStatus: UEngine::Browse Started Browse: "173.225.107.226/Game/..."
-//   LogGlobalStatus: Warning: BroadcastTravelFailure ... PendingNetGameCreateFailure,
+//   UEngine::Browse Started Browse: "66.94.117.53:10100/Game/TheIsle/Maps/..."
+//   BroadcastTravelFailure ... PendingNetGameCreateFailure,
 //     reason: "Error initializing network layer."
 //
-// 21 ms apart, with no anti-cheat line of any kind. That failure is raised when
-// UPendingNetGame comes out of InitNetDriver with no net driver, which happens
-// either because the driver could not be created or because InitConnect failed
-// and destroyed it. BeginSession sits inside InitConnect, so something ahead of
-// it is now giving up first.
+// with no net driver line of any kind, and one line in this proxy's own log
+// that explains it:
 //
-// The getter below is hooked to narrow that down. If the driver asks for the
-// anti-cheat interface and gets NULL back, the driver would fail exactly this
-// quietly, and BeginSession would never be reached no matter what it answers.
+//   EOS_Platform_GetAntiCheatClientInterface | NULL
+//
+// The SDK only builds its anti-cheat client half when the anti-cheat client is
+// actually running, and here it cannot be: the game's own launcher is the EAC
+// bootstrapper and the installer has to replace it, since EAC will not map an
+// unsigned EOS SDK into the process it protects. So the game asks for the
+// interface, gets nothing, and gives up before it ever builds a net driver.
+// That is why answering BeginSession alone changed nothing - nothing was
+// calling it.
+//
+// So the interface itself is stood in for. When the real SDK has none, the
+// getter hands back a tag of ours instead, and every call made against that tag
+// is answered here rather than passed to a real SDK that has no idea what it
+// is. A handle that came from the real SDK still goes to the real SDK, so a
+// machine where EAC does run is untouched.
+//
+// What is answered: sessions begin and end successfully, status polls report
+// nothing to report, peers register, and message protection copies its input
+// through unchanged. That last one is the honest limit of this: a server that
+// really speaks anti-cheat expects protected bytes and will not accept a plain
+// copy, which is another way of saying this gets a client onto servers that do
+// not run the server half, and no further.
+//
+// This does not defeat anti-cheat anywhere but in this process. A server that
+// runs the server side still sees a client that never registered with Epic and
+// is free to refuse it or drop it later. What changes is that the client stops
+// halting itself before it ever finds out.
+//
+// EOS_PROXY_NO_ANTICHEAT=1 turns all of it off - no stand-in interface, and
+// BeginSession left exactly as the real SDK answers it - for telling this
+// failure apart from a later one.
+
+#define EOS_RESULT_SUCCESS   0
+#define EOS_RESULT_NOTFOUND  18
 
 static int g_AntiCheatPassThrough = -1;      // -1 until the environment is read
-
-// Handing back NULL here is a failure the net driver never explains. Printed
-// once, since the driver asks for it on every connection attempt.
-extern __declspec(dllexport) void* EOS_Platform_GetAntiCheatClientInterface(void* Handle) {
-    typedef void*(__cdecl* fn_t)(void*);
-    fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_Platform_GetAntiCheatClientInterface");
-
-    void* iface = original(Handle);
-    static int logged = 0;
-    if (!logged) {
-        logged = 1;
-        LogText("EOS_Platform_GetAntiCheatClientInterface | %s",
-                iface ? "handle returned" : "NULL - the client half is not available");
-    }
-    return iface;
-}
 
 static int AntiCheat_PassThrough(void) {
     if (g_AntiCheatPassThrough < 0) {
         char v[8];
         g_AntiCheatPassThrough = GetEnvironmentVariableA("EOS_PROXY_NO_ANTICHEAT", v, sizeof(v)) > 0;
         if (g_AntiCheatPassThrough)
-            LogText("AntiCheat: EOS_PROXY_NO_ANTICHEAT is set, BeginSession left alone");
+            LogText("AntiCheat: EOS_PROXY_NO_ANTICHEAT is set, the real SDK answers for itself");
     }
     return g_AntiCheatPassThrough;
 }
 
+// The stand-in interface. Only its address matters: it is never dereferenced,
+// it just has to be a pointer the real SDK could never have returned.
+static const char g_AntiCheatTag[] = "eos-proxy stand-in anti-cheat client";
+#define ANTICHEAT_STANDIN  ((void*) g_AntiCheatTag)
+#define IS_STANDIN(h)      ((const void*)(h) == (const void*) g_AntiCheatTag)
+
+// Notification ids handed out for the callbacks nothing will ever fire. Zero
+// means failure to the caller, so this starts above it and only goes up.
+static uint64_t g_AntiCheatNotifyId = 0x505200000001ull;
+
+static uint64_t AntiCheat_NextNotifyId(void) {
+    return g_AntiCheatNotifyId++;
+}
+
+// Both message protection option structs start the same way, and these three
+// fields are all that a straight copy needs.
+typedef struct {
+    int32_t     ApiVersion;
+    uint32_t    DataLengthBytes;
+    const void* Data;
+    uint32_t    OutBufferSizeBytes;
+} EOS_AntiCheatClient_ProtectMessageOptions;
+
+typedef struct {
+    int32_t  ApiVersion;
+    uint32_t DataLengthBytes;
+} EOS_AntiCheatClient_GetProtectMessageOutputLengthOptions;
+
+extern __declspec(dllexport) void* EOS_Platform_GetAntiCheatClientInterface(void* Handle) {
+    typedef void*(__cdecl* fn_t)(void*);
+    fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_Platform_GetAntiCheatClientInterface");
+
+    void* iface = original(Handle);
+    static int logged = 0;              // the driver asks on every attempt
+    if (iface || AntiCheat_PassThrough()) {
+        if (!logged) {
+            logged = 1;
+            LogText("EOS_Platform_GetAntiCheatClientInterface | %s",
+                    iface ? "handle from the real SDK" : "NULL, left as it is");
+        }
+        return iface;
+    }
+
+    if (!logged) {
+        logged = 1;
+        LogText("EOS_Platform_GetAntiCheatClientInterface | NULL from the real SDK, "
+                "handing back the stand-in so the net driver can be built");
+    }
+    return ANTICHEAT_STANDIN;
+}
+
+// ---- sessions
+
 extern __declspec(dllexport) int32_t EOS_AntiCheatClient_BeginSession(void* Handle, const void* Options) {
+    if (IS_STANDIN(Handle)) {
+        LogText("EOS_AntiCheatClient_BeginSession | stand-in, reporting success");
+        return EOS_RESULT_SUCCESS;
+    }
+
     typedef int32_t(__cdecl* fn_t)(void*, const void*);
     fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_AntiCheatClient_BeginSession");
 
     int32_t result = original(Handle, Options);
-    if (AntiCheat_PassThrough() || result == 0) {
+    if (AntiCheat_PassThrough() || result == EOS_RESULT_SUCCESS) {
         LogText("EOS_AntiCheatClient_BeginSession | result %d", result);
         return result;
     }
 
     LogText("EOS_AntiCheatClient_BeginSession | result %d, reporting success instead", result);
-    return 0;   // EOS_Success
+    return EOS_RESULT_SUCCESS;
 }
 
 extern __declspec(dllexport) int32_t EOS_AntiCheatClient_EndSession(void* Handle, const void* Options) {
+    if (IS_STANDIN(Handle)) {
+        LogText("EOS_AntiCheatClient_EndSession | stand-in");
+        return EOS_RESULT_SUCCESS;
+    }
+
     typedef int32_t(__cdecl* fn_t)(void*, const void*);
     fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_AntiCheatClient_EndSession");
 
     int32_t result = original(Handle, Options);
     LogText("EOS_AntiCheatClient_EndSession | result %d", result);
-    return AntiCheat_PassThrough() ? result : 0;
+    return AntiCheat_PassThrough() ? result : EOS_RESULT_SUCCESS;
 }
 
-// Polled every tick, so only a change of answer is worth a line.
+// Polled every tick, so only a change of answer is worth a line. Nothing to
+// report is EOS_NotFound, which is what a clean client answers.
 extern __declspec(dllexport) int32_t EOS_AntiCheatClient_PollStatus(
         void* Handle, const void* Options, uint32_t* OutViolationType, char* OutMessage) {
+    if (IS_STANDIN(Handle)) {
+        if (OutViolationType) *OutViolationType = 0;
+        if (OutMessage) OutMessage[0] = 0;
+        return EOS_RESULT_NOTFOUND;
+    }
+
     typedef int32_t(__cdecl* fn_t)(void*, const void*, uint32_t*, char*);
     fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_AntiCheatClient_PollStatus");
 
@@ -948,47 +1002,151 @@ extern __declspec(dllexport) int32_t EOS_AntiCheatClient_PollStatus(
     return result;
 }
 
-// Message protection is only used when the server asks for it. These are
-// passed straight through; the first few failures say whether that is where
-// the connection dies next.
-static void AntiCheat_LogFailure(const char* name, int32_t result, int* budget) {
-    if (result == 0 || *budget <= 0) return;
-    (*budget)--;
-    LogText("%s | result %d", name, result);
+// ---- peers
+
+extern __declspec(dllexport) int32_t EOS_AntiCheatClient_RegisterPeer(void* Handle, const void* Options) {
+    if (IS_STANDIN(Handle)) return EOS_RESULT_SUCCESS;
+    typedef int32_t(__cdecl* fn_t)(void*, const void*);
+    fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_AntiCheatClient_RegisterPeer");
+    return original(Handle, Options);
+}
+
+extern __declspec(dllexport) int32_t EOS_AntiCheatClient_UnregisterPeer(void* Handle, const void* Options) {
+    if (IS_STANDIN(Handle)) return EOS_RESULT_SUCCESS;
+    typedef int32_t(__cdecl* fn_t)(void*, const void*);
+    fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_AntiCheatClient_UnregisterPeer");
+    return original(Handle, Options);
+}
+
+extern __declspec(dllexport) int32_t EOS_AntiCheatClient_ReceiveMessageFromPeer(void* Handle, const void* Options) {
+    if (IS_STANDIN(Handle)) return EOS_RESULT_SUCCESS;
+    typedef int32_t(__cdecl* fn_t)(void*, const void*);
+    fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_AntiCheatClient_ReceiveMessageFromPeer");
+    return original(Handle, Options);
+}
+
+extern __declspec(dllexport) int32_t EOS_AntiCheatClient_ReceiveMessageFromServer(void* Handle, const void* Options) {
+    if (IS_STANDIN(Handle)) {
+        static int budget = 3;
+        if (budget > 0) {
+            budget--;
+            LogText("EOS_AntiCheatClient_ReceiveMessageFromServer | stand-in, message dropped");
+        }
+        return EOS_RESULT_SUCCESS;
+    }
+    typedef int32_t(__cdecl* fn_t)(void*, const void*);
+    fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_AntiCheatClient_ReceiveMessageFromServer");
+    return original(Handle, Options);
+}
+
+extern __declspec(dllexport) int32_t EOS_AntiCheatClient_AddExternalIntegrityCatalog(void* Handle, const void* Options) {
+    if (IS_STANDIN(Handle)) return EOS_RESULT_SUCCESS;
+    typedef int32_t(__cdecl* fn_t)(void*, const void*);
+    fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_AntiCheatClient_AddExternalIntegrityCatalog");
+    return original(Handle, Options);
+}
+
+// ---- message protection
+//
+// Copied through untouched. The output of "protecting" a message is the
+// message, which is the only thing a stand-in can honestly do.
+
+extern __declspec(dllexport) int32_t EOS_AntiCheatClient_GetProtectMessageOutputLength(
+        void* Handle, const EOS_AntiCheatClient_GetProtectMessageOutputLengthOptions* Options,
+        uint32_t* OutBufferLengthBytes) {
+    if (IS_STANDIN(Handle)) {
+        if (!Options || !OutBufferLengthBytes) return EOS_RESULT_NOTFOUND;
+        *OutBufferLengthBytes = Options->DataLengthBytes;
+        return EOS_RESULT_SUCCESS;
+    }
+
+    typedef int32_t(__cdecl* fn_t)(void*, const void*, uint32_t*);
+    fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_AntiCheatClient_GetProtectMessageOutputLength");
+    return original(Handle, Options, OutBufferLengthBytes);
+}
+
+static int32_t AntiCheat_CopyMessage(const EOS_AntiCheatClient_ProtectMessageOptions* Options,
+                                     void* OutBuffer, uint32_t* OutBytesWritten) {
+    if (!Options || !Options->Data || !OutBuffer || !OutBytesWritten) return EOS_RESULT_NOTFOUND;
+    if (Options->OutBufferSizeBytes < Options->DataLengthBytes) return EOS_RESULT_NOTFOUND;
+    memcpy(OutBuffer, Options->Data, Options->DataLengthBytes);
+    *OutBytesWritten = Options->DataLengthBytes;
+    return EOS_RESULT_SUCCESS;
 }
 
 extern __declspec(dllexport) int32_t EOS_AntiCheatClient_ProtectMessage(
-        void* Handle, const void* Options, void* OutBuffer, uint32_t* OutBytesWritten) {
+        void* Handle, const EOS_AntiCheatClient_ProtectMessageOptions* Options,
+        void* OutBuffer, uint32_t* OutBytesWritten) {
+    if (IS_STANDIN(Handle)) {
+        static int budget = 3;
+        int32_t result = AntiCheat_CopyMessage(Options, OutBuffer, OutBytesWritten);
+        if (budget > 0) {
+            budget--;
+            LogText("EOS_AntiCheatClient_ProtectMessage | stand-in, %u bytes copied through, result %d",
+                    Options ? Options->DataLengthBytes : 0, result);
+        }
+        return result;
+    }
+
     typedef int32_t(__cdecl* fn_t)(void*, const void*, void*, uint32_t*);
     fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_AntiCheatClient_ProtectMessage");
-
-    int32_t result = original(Handle, Options, OutBuffer, OutBytesWritten);
-    static int budget = 3;
-    AntiCheat_LogFailure("EOS_AntiCheatClient_ProtectMessage", result, &budget);
-    return result;
+    return original(Handle, Options, OutBuffer, OutBytesWritten);
 }
 
 extern __declspec(dllexport) int32_t EOS_AntiCheatClient_UnprotectMessage(
-        void* Handle, const void* Options, void* OutBuffer, uint32_t* OutBytesWritten) {
+        void* Handle, const EOS_AntiCheatClient_ProtectMessageOptions* Options,
+        void* OutBuffer, uint32_t* OutBytesWritten) {
+    if (IS_STANDIN(Handle)) {
+        static int budget = 3;
+        int32_t result = AntiCheat_CopyMessage(Options, OutBuffer, OutBytesWritten);
+        if (budget > 0) {
+            budget--;
+            LogText("EOS_AntiCheatClient_UnprotectMessage | stand-in, %u bytes copied through, result %d",
+                    Options ? Options->DataLengthBytes : 0, result);
+        }
+        return result;
+    }
+
     typedef int32_t(__cdecl* fn_t)(void*, const void*, void*, uint32_t*);
     fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_AntiCheatClient_UnprotectMessage");
-
-    int32_t result = original(Handle, Options, OutBuffer, OutBytesWritten);
-    static int budget = 3;
-    AntiCheat_LogFailure("EOS_AntiCheatClient_UnprotectMessage", result, &budget);
-    return result;
+    return original(Handle, Options, OutBuffer, OutBytesWritten);
 }
 
-extern __declspec(dllexport) int32_t EOS_AntiCheatClient_GetProtectMessageOutputLength(
-        void* Handle, const void* Options, uint32_t* OutBufferLengthBytes) {
-    typedef int32_t(__cdecl* fn_t)(void*, const void*, uint32_t*);
-    fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_AntiCheatClient_GetProtectMessageOutputLength");
+// ---- notifications
+//
+// Registered once and then waited on forever. A stand-in has nothing to report,
+// so these hand back an id that is never used again. Zero would read as a
+// failure to register, which some callers treat as fatal.
 
-    int32_t result = original(Handle, Options, OutBufferLengthBytes);
-    static int budget = 3;
-    AntiCheat_LogFailure("EOS_AntiCheatClient_GetProtectMessageOutputLength", result, &budget);
-    return result;
-}
+#define ANTICHEAT_ADD_NOTIFY(name)                                                       \
+    extern __declspec(dllexport) uint64_t EOS_AntiCheatClient_##name(                    \
+            void* Handle, const void* Options, void* ClientData, void* NotificationFn) { \
+        if (IS_STANDIN(Handle)) return AntiCheat_NextNotifyId();                         \
+        typedef uint64_t(__cdecl* fn_t)(void*, const void*, void*, void*);               \
+        fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_AntiCheatClient_" #name);    \
+        return original(Handle, Options, ClientData, NotificationFn);                    \
+    }
+
+#define ANTICHEAT_REMOVE_NOTIFY(name)                                                    \
+    extern __declspec(dllexport) void EOS_AntiCheatClient_##name(                        \
+            void* Handle, uint64_t NotificationId) {                                     \
+        if (IS_STANDIN(Handle)) return;                                                  \
+        typedef void(__cdecl* fn_t)(void*, uint64_t);                                    \
+        fn_t original = (fn_t) GetProcAddress(g_hOrig, "EOS_AntiCheatClient_" #name);    \
+        original(Handle, NotificationId);                                                \
+    }
+
+ANTICHEAT_ADD_NOTIFY(AddNotifyClientIntegrityViolated)
+ANTICHEAT_ADD_NOTIFY(AddNotifyMessageToPeer)
+ANTICHEAT_ADD_NOTIFY(AddNotifyMessageToServer)
+ANTICHEAT_ADD_NOTIFY(AddNotifyPeerActionRequired)
+ANTICHEAT_ADD_NOTIFY(AddNotifyPeerAuthStatusChanged)
+
+ANTICHEAT_REMOVE_NOTIFY(RemoveNotifyClientIntegrityViolated)
+ANTICHEAT_REMOVE_NOTIFY(RemoveNotifyMessageToPeer)
+ANTICHEAT_REMOVE_NOTIFY(RemoveNotifyMessageToServer)
+ANTICHEAT_REMOVE_NOTIFY(RemoveNotifyPeerActionRequired)
+ANTICHEAT_REMOVE_NOTIFY(RemoveNotifyPeerAuthStatusChanged)
 
 // -------- The join path, watched rather than changed ------------------------
 

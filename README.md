@@ -205,28 +205,61 @@ servers were never affected either way.
 
 ## Anti-cheat
 
-Once a join resolves to a real address, the net driver is the next thing to stop it. Redpoint's
-driver calls `EOS_AntiCheatClient_BeginSession` before it opens the connection and treats a
-failure as fatal:
+Once a join resolves to a real address, the net driver is the next thing to stop it, and for a
+long time it stopped in a way that said nothing at all:
 
 ```
-LogRedpointEOSAntiCheat: Error: Game Anti-Cheat: CreateSession(...): Unable to begin game
-  session (got result EOS_NoConnection).
-LogRedpointEOSNetworking: Error: Net driver failed to set up Anti-Cheat session.
-LogNet: Warning: error initializing the network stack
+UEngine::Browse Started Browse: "66.94.117.53:10100/Game/TheIsle/Maps/TitleMap?765611993..."
+BroadcastTravelFailure ... PendingNetGameCreateFailure, reason: "Error initializing network layer."
 ```
 
-It fails because the anti-cheat client is not running, and it cannot be: the game's own launcher
-is the anti-cheat bootstrapper, and the installer has to replace it because EAC will not map an
-unsigned EOS SDK into the process it protects. `BeginSession` is where those two requirements
-meet, so the proxy answers it: the call still goes to the real SDK, and a failure is reported to
-the game as success. The rest of the anti-cheat client surface is passed through untouched and
-only logged.
+Thirty milliseconds apart, with no anti-cheat line anywhere and no `BeginSession` call in the
+proxy's own log either. One hooked call explained all of it:
 
-Be blunt about what that is and is not. **Nothing is defeated outside this process.** A server
-running the server half of anti-cheat still sees a client that never registered, and is free to
-refuse it or drop it later. What changes is only that the client stops halting itself before it
-ever finds out.
+```
+EOS_Platform_GetAntiCheatClientInterface | NULL
+```
+
+The SDK only builds its anti-cheat client half when the anti-cheat client is actually running, and
+here it cannot be: the game's own launcher **is** the EAC bootstrapper, and the installer has to
+replace it because EAC will not map an unsigned EOS SDK into the process it protects. So the net
+driver asked for the interface, got nothing, and gave up before it ever built itself. Answering
+`BeginSession` had changed nothing, because with no interface nothing was calling it.
+
+So the proxy stands in for the interface. When the real SDK has none, the getter hands back a tag
+of its own, and all 21 `EOS_AntiCheatClient_*` calls check for that tag and answer locally rather
+than handing a real SDK a handle it has never seen. Sessions begin and end, status polls report
+nothing to report, peers register, message protection copies its input through untouched, and the
+notification registrations return ids that nothing will ever fire. A handle that did come from the
+real SDK still goes straight to it, so a machine where EAC does run is unaffected.
+
+With that in place the join goes all the way onto the wire. No travel failure, a live
+`RedpointEOSNetDriver`, and `LogNetVersion` in the game's own log.
+
+### Where it still stops
+
+The server half is the wall, and it is a real one. Verified the same way on two different
+community servers:
+
+```
+EOS_Sessions_JoinSession | ResultCode 0
+EOS_AntiCheatClient_BeginSession | stand-in, reporting success
+EOS_AntiCheatClient_ReceiveMessageFromServer | stand-in, message dropped
+EOS_AntiCheatClient_ReceiveMessageFromServer | stand-in, message dropped
+EOS_AntiCheatClient_ReceiveMessageFromServer | stand-in, message dropped
+```
+
+The server sends an anti-cheat challenge, three times, a few seconds apart. A real client would
+answer through the callback registered with `AddNotifyMessageToServer`, and those answers are
+produced by the EAC client module and checked against Epic's own backend. A stand-in has no key
+material and cannot invent one, so it drops them, the server never hears back, and the connection
+times out after about 73 seconds and drops to the menu.
+
+**That is the honest limit of this whole approach.** Everything before it works: login, the server
+browser, the matchmaker, the session lookup, the join, the net driver, the connection itself. What
+cannot be done from inside the client is convincing a server that a client Epic never vouched for
+is running the anti-cheat it demands. Only a server that does not run the server half will let
+this in.
 
 `EOS_PROXY_NO_ANTICHEAT=1` leaves `BeginSession` alone, which is how you tell this failure apart
 from a later one.

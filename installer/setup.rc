@@ -1,4 +1,4 @@
-#include <windows.h>
+﻿#include <windows.h>
 
 // The proxy DLL built by build.bat, embedded so the installer is a single exe.
 // Found through the include paths passed to rc.exe.
@@ -36,10 +36,14 @@ SLSCONF  RCDATA "slssteam-config.yaml"
 // t69 - a t59 run joined the session and then failed to build a net driver at
 // all, before any anti-cheat call. GetAntiCheatClientInterface is hooked to say
 // whether the driver is even handed the interface it needs.
+// t79 - that hook answered it: the SDK hands back no anti-cheat client at all
+// on a machine where EAC cannot run, so the driver gave up before building.
+// The proxy now stands in for the interface itself and answers every call made
+// against it. Servers running the server half still refuse this.
 // SETUP_VERSION in setup.c prints the same thing at runtime.
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     1,8,0,0
-PRODUCTVERSION  1,8,0,0
+FILEVERSION     1,9,0,0
+PRODUCTVERSION  1,9,0,0
 FILEOS          VOS_NT_WINDOWS32
 FILETYPE        VFT_APP
 BEGIN
@@ -48,11 +52,11 @@ BEGIN
         BLOCK "040904B0"
         BEGIN
             VALUE "FileDescription", "EOS Proxy Setup"
-            VALUE "FileVersion",     "1.8.0.0"
+            VALUE "FileVersion",     "1.9.0.0"
             VALUE "InternalName",    "eos-proxy-setup"
             VALUE "OriginalFilename","eos-proxy-setup.exe"
             VALUE "ProductName",     "EOS Proxy"
-            VALUE "ProductVersion",  "t69 (test 6, 2026-09-10)"
+            VALUE "ProductVersion",  "t79 (test 7, 2026-09-10)"
             VALUE "Comments",        "The Isle evrima: proxy + gbe_fork + anti-cheat launcher stand-in"
         END
     END
