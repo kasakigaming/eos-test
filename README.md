@@ -257,11 +257,14 @@ never varies. Between servers it does:
 02 00 0b 00 10 5d 00 00 00 00 00 00 00 00 00 00 00 00 00 00 81 64 0c fb
 02 00 0b 00 f9 79 00 00 00 00 00 00 00 00 00 00 00 00 00 00 0c 9c 1d 3b
 02 00 0b 00 83 17 00 00 00 00 00 00 00 00 00 00 00 00 00 00 f2 42 e2 6a
+02 00 0b 00 7c 8d ff 3e 00 00 00 00 00 00 00 00 00 00 00 00 64 4e 3d 47
 ```
 
-Three servers, three of them. Four bytes of header, then a two byte value that changes per
-session, then twelve zeros, then four bytes that look like a checksum over the rest. So there is
-a per-session value in it, and a canned reply could not have worked even in principle.
+Four servers, four of them. Four bytes of header, then a four byte value, then twelve zeros, then
+four bytes that look like a checksum over the rest. The fourth sample is the one that fixes the
+reading: the first three had a top half of zero, which made the value look two bytes wide, and
+`7c 8d ff 3e` says it is not. So there is a per-session value in there, and a canned reply could
+not have worked even in principle.
 
 A real client answers through the callback registered with `AddNotifyMessageToServer`, and that
 answer is an attestation the EAC client module produces and Epic's own service verifies. A
@@ -291,9 +294,9 @@ refused a login would say so in a `Failure` packet. Neither happens. The approva
 waiting for an attestation that never comes.
 
 Reading these logs takes one caveat, and it is a gap rather than a detail. `LogNet` never prints a
-line - not at any verbosity, in any of the eleven sessions logged here. The only engine net
-category that appears at all is `LogNetVersion`. What this build does instead is log the same
-events under a category of its own:
+line - not at any verbosity, in any session logged here. The only engine net category that appears
+at all is `LogNetVersion`. What this build does instead is log the same events under a category of
+its own:
 
 ```
 LogGlobalStatus: UEngine::Browse Started Browse: "78.46.76.73/Game/TheIsle/..."
@@ -301,25 +304,48 @@ LogGlobalStatus: Warning: UEngine::BroadcastTravelFailure Travel failed, type: E
 ```
 
 Both of those are `LogNet` call sites in stock Unreal, so the net layer is not silent, it is
-reporting somewhere else. `LogHandshake` and `LogNetDriver` have no such substitute and say
-nothing at all.
+reporting somewhere else. `LogHandshake` and `LogNetDriver` have no such substitute and say nothing
+at all.
 
-Whether `-LogCmds` reaches the game is still unproven, and the launcher passing it is not evidence
-that it arrives. One session out of eleven printed `Log category ... verbosity has been raised to
-Verbose`, and the seven categories it names are not the six the launcher passes. No session that
-got as far as a join has ever printed one. The categories that do come through verbose,
-`LogOnlineSession` and the `LogRedpointEOS*` set, come through in sessions with no raise at all,
-so they are verbose by default and settle nothing either way. The config route is closed for the
-reason the launcher already says: the game rewrites `Saved\Config\WindowsClient\Engine.ini` down to
-a single stanza on every run, so a `[Core.Log]` section added there is gone before it is read.
+Turning those categories on is a dead end, and it took two tests to say that with any confidence.
+The launcher passes `-LogCmds`, and the proxy logs the game's own command line from inside the
+process, which shows the whole argument arriving intact, every category, quotes and all. Nothing
+answers it. No `Log category ... has been raised` from the engine, and not one line from `LogNet`,
+`LogNetDriver`, `LogHandshake`, `LogRedpointEOSNetworking` or `LogRedpointEOSAntiCheat`, through a
+join that ran its full 73 seconds.
 
-That one surviving stanza is worth reading on its own account. It is
-`[GameNetDriver StatelessConnectHandlerComponent]`, and its `CachedClientID` has counted up once
-per connection attempt, 1 to 6 across these sessions. Unreal's stateless handshake did run every
-time, which is the last thing the game admits to before the silence.
+That is not the command line being ignored, and the proof is an argument sitting right next to it.
+The game's executable carries an allow list of what a shipping build accepts,
 
-So the next thing to settle is whether the command line arrives at all, and the proxy can answer
-that from inside the game process instead of guessing at it from outside.
+```
+-game -log -unattended -nosplash -RenderOffscreen -d3d12 -nullrhi -NoSound
+-NoLoadingScreen -TILoadTest ... -LogCmds -abslog
+```
+
+which is The Isle's own list, their load-test switches included, and `-LogCmds` is on it
+deliberately. So the launcher passes `-abslog` too, as a control: same list, and a value with no
+spaces in it. It works. The engine writes its entire log to the path that argument names. The
+command line is read, allow-listed arguments are honoured, and `-LogCmds` alone is lost.
+
+The difference between the two is the space. `-LogCmds` cannot be written without one - the
+documented syntax the executable itself carries is `-LogCmds="foo verbose, bar off"` - and quoting
+the whole argument rather than just the value does not save it either. The same help text names the
+way around it, because the config form of the same setting needs no spaces at all:
+
+```
+[Core.Log]
+[cat]=[level]        foo=verbose
+```
+
+Which is why `-ini:Engine:[Core.Log]:...` is the next thing to try. The allow list already carries
+three `-ini:Engine:[...]` arguments of The Isle's own, so the form is one this build expects.
+
+The plain config route stays closed, for the reason the launcher already says: the game rewrites
+`Saved\Config\WindowsClient\Engine.ini` down to a single stanza on every run, so a `[Core.Log]`
+section added there is gone before it is read. That one surviving stanza is worth reading on its own
+account. It is `[GameNetDriver StatelessConnectHandlerComponent]`, and its `CachedClientID` has
+counted up once per connection attempt. Unreal's stateless handshake did run every time, which is
+the last thing the game admits to before the silence.
 
 **That is the honest limit of this whole approach, and it is not a bug to be fixed.** Everything
 before it works: login, the server browser, the matchmaker, the session lookup, the join, the net

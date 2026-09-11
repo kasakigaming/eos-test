@@ -21,43 +21,57 @@
 
 #define PATHBUF 1024
 
-// What to ask the game for, and the two things this build needs before it will
-// hear the question at all.
+// What to ask the game for, and the form it will actually accept.
 //
-// t99 settled the part that was guesswork. The proxy logs the game's own
-// command line from inside the process, and the whole -LogCmds argument arrives
-// intact, every category, quotes and all. Not one of them answered: no line
-// from LogNet, LogNetDriver, LogHandshake, LogRedpointEOSNetworking or
-// LogRedpointEOSAntiCheat, and no "Log category ... has been raised" from the
-// engine either, through a join that ran its full 73 seconds.
+// Two tests to rule out the obvious route. The proxy logs the game's own
+// command line from inside the process, so there is no guessing left about
+// what arrives: the whole -LogCmds argument does, every category, quotes and
+// all, in both the -LogCmds="a b" form and the "-LogCmds=a b" one. Nothing
+// answers it. No "Log category ... has been raised" from the engine, and not a
+// line from LogNet, LogNetDriver, LogHandshake, LogRedpointEOSNetworking or
+// LogRedpointEOSAntiCheat, through joins that ran their full 73 seconds.
 //
-// The game's executable says why that is worth another try rather than a
-// shrug. It carries an allow list of the arguments a shipping build accepts,
+// That is not the command line being ignored, and -abslog is the argument that
+// proves it. The game's executable carries an allow list of what a shipping
+// build accepts,
 //
 //   -game -log -unattended -nosplash -RenderOffscreen -d3d12 -nullrhi -NoSound
 //   -NoLoadingScreen -TILoadTest ... -LogCmds -abslog
 //
-// which is The Isle's own list - their load-test switches sit in it - and they
-// put -LogCmds on it deliberately. An allow list has to split the command line
-// into arguments to check them, and -LogCmds="a b, c d" is one argument only to
-// a splitter that honours quotes. So the argument is quoted whole here,
-// "-LogCmds=a b, c d", which is a single token to any splitter at all.
+// which is The Isle's own list, their load-test switches included. -abslog is
+// on it and its value has no spaces, and it works: the engine writes its whole
+// log to the path named below. So the command line is read, allow-listed
+// arguments are honoured, and -LogCmds alone is lost. The space is the only
+// thing that separates the two, and -LogCmds cannot be written without one.
 //
-// -abslog is the control, on the same allow list and needing no quotes of its
-// own. If the file it names appears, the command line is read and only the
-// LogCmds value is being lost; if it does not, the line is dropped wholesale
-// and no quoting will fix it. It is skipped when the path would need quoting
-// too, since a quoted control controls nothing.
+// The same help text in the executable names the way around it, because the
+// config form of the setting needs no spaces at all:
 //
-// LogOnlineSession is gone from the list: it logs Verbose in every session,
-// asked for or not, so it can only ever agree. The config route stays closed,
-// the game rewrites Engine.ini down to one stanza on every run. Steam's own
-// launch options still follow ours, so a user setting -LogCmds overrides this.
-#define LOG_CMDS "\"-LogCmds=LogNet Verbose, LogNetDriver Verbose, "                \
-                 "LogHandshake Verbose, LogGlobalStatus Verbose, "                  \
-                 "LogMatchmaking Verbose, LogRedpointEOSNetworking Verbose, "       \
-                 "LogRedpointEOSAntiCheat Verbose\""
+//   [Core.Log]
+//   [cat]=[level]        foo=verbose
+//
+// which -ini: sets from the command line, one spaceless argument per category.
+// The allow list already carries three -ini:Engine:[...] arguments of The
+// Isle's own, so the form is one this build expects to see.
+//
+// -LogCmds is gone from here on purpose rather than kept as a spare. It is
+// inert twice over, and leaving it in would make a run that finally works
+// unattributable. global=Verbose rides along as the control: if the -ini: route
+// reaches log suppression at all, that alone makes the log enormous, which is
+// an answer even if every category below turns out to be compiled out.
+#define LOG_INI  " -ini:Engine:[Core.Log]:global=Verbose"                           \
+                 " -ini:Engine:[Core.Log]:LogNet=Verbose"                           \
+                 " -ini:Engine:[Core.Log]:LogNetDriver=Verbose"                     \
+                 " -ini:Engine:[Core.Log]:LogHandshake=Verbose"                     \
+                 " -ini:Engine:[Core.Log]:LogGlobalStatus=Verbose"                  \
+                 " -ini:Engine:[Core.Log]:LogMatchmaking=Verbose"                   \
+                 " -ini:Engine:[Core.Log]:LogRedpointEOSNetworking=Verbose"         \
+                 " -ini:Engine:[Core.Log]:LogRedpointEOSAntiCheat=Verbose"
 
+// Where the engine writes its log. Worth keeping now that it is proven to work:
+// it puts the engine's account and the proxy's own log in step, and it is the
+// one argument here known to survive the allow list. Skipped when the path
+// would need quoting, since a quoted argument is what does not survive.
 #define ABSLOG_NAME "eos-proxy-engine.log"
 
 static void Fail(const char* what) {
@@ -198,7 +212,7 @@ int main(void) {
 
     char cmd[PATHBUF * 3];
     const char* args = OwnArgs();
-    _snprintf_s(cmd, sizeof(cmd), _TRUNCATE, "\"%s\" " LOG_CMDS "%s%s%s%s",
+    _snprintf_s(cmd, sizeof(cmd), _TRUNCATE, "\"%s\"" LOG_INI "%s%s%s%s",
                 exe, *abslog ? " " : "", abslog, *args ? " " : "", args);
 
     STARTUPINFOA si = { 0 };
