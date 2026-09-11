@@ -258,9 +258,10 @@ never varies. Between servers it does:
 02 00 0b 00 f9 79 00 00 00 00 00 00 00 00 00 00 00 00 00 00 0c 9c 1d 3b
 02 00 0b 00 83 17 00 00 00 00 00 00 00 00 00 00 00 00 00 00 f2 42 e2 6a
 02 00 0b 00 7c 8d ff 3e 00 00 00 00 00 00 00 00 00 00 00 00 64 4e 3d 47
+02 00 0b 00 5a 63 00 00 00 00 00 00 00 00 00 00 00 00 00 00 9f 1f 5b 56
 ```
 
-Four servers, four of them. Four bytes of header, then a four byte value, then twelve zeros, then
+Five servers, five of them. Four bytes of header, then a four byte value, then twelve zeros, then
 four bytes that look like a checksum over the rest. The fourth sample is the one that fixes the
 reading: the first three had a top half of zero, which made the value look two bytes wide, and
 `7c 8d ff 3e` says it is not. So there is a per-session value in there, and a canned reply could
@@ -307,45 +308,50 @@ Both of those are `LogNet` call sites in stock Unreal, so the net layer is not s
 reporting somewhere else. `LogHandshake` and `LogNetDriver` have no such substitute and say nothing
 at all.
 
-Turning those categories on is a dead end, and it took two tests to say that with any confidence.
-The launcher passes `-LogCmds`, and the proxy logs the game's own command line from inside the
-process, which shows the whole argument arriving intact, every category, quotes and all. Nothing
-answers it. No `Log category ... has been raised` from the engine, and not one line from `LogNet`,
-`LogNetDriver`, `LogHandshake`, `LogRedpointEOSNetworking` or `LogRedpointEOSAntiCheat`, through a
-join that ran its full 73 seconds.
+Turning those categories on took four tests to get right, and three of the four were dead ends
+worth writing down, because each one looks like the answer until it is measured.
 
-That is not the command line being ignored, and the proof is an argument sitting right next to it.
-The game's executable carries an allow list of what a shipping build accepts,
+The command line is not the problem. The proxy logs the game's own command line from inside the
+process, so what arrives is observed rather than assumed, and `-LogCmds` arrives whole in both
+spellings. Neither raises anything. The game's executable carries an allow list of what a shipping
+build accepts,
 
 ```
 -game -log -unattended -nosplash -RenderOffscreen -d3d12 -nullrhi -NoSound
 -NoLoadingScreen -TILoadTest ... -LogCmds -abslog
 ```
 
-which is The Isle's own list, their load-test switches included, and `-LogCmds` is on it
-deliberately. So the launcher passes `-abslog` too, as a control: same list, and a value with no
-spaces in it. It works. The engine writes its entire log to the path that argument names. The
-command line is read, allow-listed arguments are honoured, and `-LogCmds` alone is lost.
+which is The Isle's own list, their load-test switches included. `-abslog` is on it, differs from
+`-LogCmds` only in having no spaces in its value, and works every time: the engine writes its whole
+log to the path named. So allow-listed arguments are honoured and `-LogCmds` is lost on its own.
+Setting the same thing the spaceless way, `-ini:Engine:[Core.Log]:LogNet=Verbose` and one of those
+per category with `global=Verbose` alongside, does nothing either. That run's log came out smaller
+than the run before it.
 
-The difference between the two is the space. `-LogCmds` cannot be written without one - the
-documented syntax the executable itself carries is `-LogCmds="foo verbose, bar off"` - and quoting
-the whole argument rather than just the value does not save it either. The same help text names the
-way around it, because the config form of the same setting needs no spaces at all:
+What works is the config file, and one session proves it. At the same line of startup where every
+other session goes straight on to `LogNFORDenoise`, that one prints:
 
 ```
-[Core.Log]
-[cat]=[level]        foo=verbose
+LogHAL: Log category LogRedpointEOSNetworking verbosity has been raised to Verbose.
+  ... six more, LogNet and LogHandshake and LogNetDriver among them ...
+LogOnline: Verbose: OSS: [OnlineSubsystemRedpointEOS].bEnabled is not set, defaulting to true
 ```
 
-Which is why `-ini:Engine:[Core.Log]:...` is the next thing to try. The allow list already carries
-three `-ini:Engine:[...]` arguments of The Isle's own, so the form is one this build expects.
+That last line is a category answering at a verbosity it does not have by default. The seven named
+match no list the launcher has ever passed and two were never asked for at all, which is what a
+hand-written `[Core.Log]` section looks like. So log suppression here is alive and reads its config.
+The section simply never survived to be read a second time: the game rewrites
+`Saved\Config\WindowsClient\Engine.ini` whenever its handshake component saves a client id, and that
+drops anything it does not recognise.
 
-The plain config route stays closed, for the reason the launcher already says: the game rewrites
-`Saved\Config\WindowsClient\Engine.ini` down to a single stanza on every run, so a `[Core.Log]`
-section added there is gone before it is read. That one surviving stanza is worth reading on its own
-account. It is `[GameNetDriver StatelessConnectHandlerComponent]`, and its `CachedClientID` has
-counted up once per connection attempt. Unreal's stateless handshake did run every time, which is
-the last thing the game admits to before the silence.
+It does not have to survive. The launcher writes the section immediately before starting the game,
+which puts it there for the one moment it is read, and the rewrite afterwards costs nothing because
+the next launch writes it again.
+
+That rewritten file is worth reading on its own account. What the game leaves in it is
+`[GameNetDriver StatelessConnectHandlerComponent]`, and its `CachedClientID` has counted up once per
+connection attempt. Unreal's stateless handshake did run every time, which is the last thing the
+game admits to before the silence.
 
 **That is the honest limit of this whole approach, and it is not a bug to be fixed.** Everything
 before it works: login, the server browser, the matchmaker, the session lookup, the join, the net

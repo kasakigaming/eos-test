@@ -21,57 +21,55 @@
 
 #define PATHBUF 1024
 
-// What to ask the game for, and the form it will actually accept.
+// How to turn the log categories on, after three routes that do not work and
+// one observation that says which one does.
 //
-// Two tests to rule out the obvious route. The proxy logs the game's own
-// command line from inside the process, so there is no guessing left about
-// what arrives: the whole -LogCmds argument does, every category, quotes and
-// all, in both the -LogCmds="a b" form and the "-LogCmds=a b" one. Nothing
-// answers it. No "Log category ... has been raised" from the engine, and not a
-// line from LogNet, LogNetDriver, LogHandshake, LogRedpointEOSNetworking or
-// LogRedpointEOSAntiCheat, through joins that ran their full 73 seconds.
+// The command line is not the problem. The proxy logs the game's own command
+// line from inside the process, so what arrives is measured rather than
+// assumed, and -LogCmds arrives whole in both spellings, -LogCmds="a b" and
+// "-LogCmds=a b". Neither raises a category. -abslog, on the same allow list
+// the executable carries and differing only in having no spaces in its value,
+// works every time. So does nothing else: -ini:Engine:[Core.Log]:X=Verbose, one
+// spaceless argument per category and global=Verbose alongside, left the log
+// smaller than the run before it.
 //
-// That is not the command line being ignored, and -abslog is the argument that
-// proves it. The game's executable carries an allow list of what a shipping
-// build accepts,
+// What does work is the config file, and there is one session that proves it.
+// Immediately after the last plugin mounts, at the same line of startup where
+// every later session goes straight on to LogNFORDenoise, that one prints
 //
-//   -game -log -unattended -nosplash -RenderOffscreen -d3d12 -nullrhi -NoSound
-//   -NoLoadingScreen -TILoadTest ... -LogCmds -abslog
+//   LogHAL: Log category LogRedpointEOSNetworking verbosity has been raised...
+//   ... six more, LogNet and LogHandshake and LogNetDriver among them ...
+//   LogOnline: Verbose: OSS: [OnlineSubsystemRedpointEOS].bEnabled is not set
 //
-// which is The Isle's own list, their load-test switches included. -abslog is
-// on it and its value has no spaces, and it works: the engine writes its whole
-// log to the path named below. So the command line is read, allow-listed
-// arguments are honoured, and -LogCmds alone is lost. The space is the only
-// thing that separates the two, and -LogCmds cannot be written without one.
+// and that last line is a category answering at a verbosity it does not have by
+// default. The seven named match no list this launcher has ever passed, and two
+// of them were never asked for at all, which is what a hand written [Core.Log]
+// section looks like. So log suppression in this build is alive and reads its
+// config; the section simply does not survive to be read twice.
 //
-// The same help text in the executable names the way around it, because the
-// config form of the setting needs no spaces at all:
+// It does not have to. The game rewrites Saved\Config\WindowsClient\Engine.ini
+// whenever its handshake component saves a client id, which drops anything it
+// does not recognise, but it reads the file at startup first. Writing the
+// section immediately before starting the game puts it there for exactly the
+// moment it is read, and the rewrite afterwards costs nothing because the next
+// launch writes it again.
 //
-//   [Core.Log]
-//   [cat]=[level]        foo=verbose
-//
-// which -ini: sets from the command line, one spaceless argument per category.
-// The allow list already carries three -ini:Engine:[...] arguments of The
-// Isle's own, so the form is one this build expects to see.
-//
-// -LogCmds is gone from here on purpose rather than kept as a spare. It is
-// inert twice over, and leaving it in would make a run that finally works
-// unattributable. global=Verbose rides along as the control: if the -ini: route
-// reaches log suppression at all, that alone makes the log enormous, which is
-// an answer even if every category below turns out to be compiled out.
-#define LOG_INI  " -ini:Engine:[Core.Log]:global=Verbose"                           \
-                 " -ini:Engine:[Core.Log]:LogNet=Verbose"                           \
-                 " -ini:Engine:[Core.Log]:LogNetDriver=Verbose"                     \
-                 " -ini:Engine:[Core.Log]:LogHandshake=Verbose"                     \
-                 " -ini:Engine:[Core.Log]:LogGlobalStatus=Verbose"                  \
-                 " -ini:Engine:[Core.Log]:LogMatchmaking=Verbose"                   \
-                 " -ini:Engine:[Core.Log]:LogRedpointEOSNetworking=Verbose"         \
-                 " -ini:Engine:[Core.Log]:LogRedpointEOSAntiCheat=Verbose"
+// global is deliberately not in this list. The raise lines are the signal and
+// they are unambiguous on their own, where global=Verbose would bury them.
+#define CORE_LOG_SECTION                                                            \
+    "[Core.Log]\r\n"                                                                \
+    "LogNet=Verbose\r\n"                                                            \
+    "LogNetDriver=Verbose\r\n"                                                      \
+    "LogHandshake=Verbose\r\n"                                                      \
+    "LogGlobalStatus=Verbose\r\n"                                                   \
+    "LogMatchmaking=Verbose\r\n"                                                    \
+    "LogRedpointEOSNetworking=Verbose\r\n"                                          \
+    "LogRedpointEOSAntiCheat=Verbose\r\n"
 
-// Where the engine writes its log. Worth keeping now that it is proven to work:
-// it puts the engine's account and the proxy's own log in step, and it is the
-// one argument here known to survive the allow list. Skipped when the path
-// would need quoting, since a quoted argument is what does not survive.
+// Where the engine writes its log. Kept for its own sake now rather than as a
+// probe: it puts the engine's account and the proxy's log in one place, and it
+// is the one argument here known to survive the allow list. Skipped when the
+// path would need quoting, since a quoted argument is what does not survive.
 #define ABSLOG_NAME "eos-proxy-engine.log"
 
 static void Fail(const char* what) {
@@ -151,6 +149,82 @@ static BOOL ReadSettingsExe(const char* root, char* out, size_t cap) {
     return JsonGetString(buf, got, "executable", out, cap);
 }
 
+// Where the engine keeps the config it writes for itself, which is not in the
+// game folder: %LOCALAPPDATA%\<Project>\Saved\Config\<Platform>\Engine.ini. The
+// project name is the first segment of the path Settings.json gives for the
+// game executable, so this needs no more configuration than the rest of the
+// launcher does. The platform folder is whichever one the engine has already
+// made - a client build writes WindowsClient, a generic one Windows - and if it
+// has made neither there is nothing here worth guessing at.
+static BOOL ProjectEngineIni(const char* rel, char* out, size_t cap) {
+    char local[PATHBUF], project[PATHBUF], dir[PATHBUF];
+
+    DWORD n = GetEnvironmentVariableA("LOCALAPPDATA", local, sizeof(local));
+    if (!n || n >= sizeof(local)) return FALSE;
+
+    size_t i = 0;
+    while (rel[i] && rel[i] != '\\' && rel[i] != '/' && i + 1 < sizeof(project)) i++;
+    if (!i) return FALSE;
+    memcpy(project, rel, i);
+    project[i] = 0;
+
+    static const char* platforms[] = { "WindowsClient", "Windows" };
+    for (int p = 0; p < 2; p++) {
+        _snprintf_s(dir, sizeof(dir), _TRUNCATE, "%s\\%s\\Saved\\Config\\%s",
+                    local, project, platforms[p]);
+        DWORD attr = GetFileAttributesA(dir);
+        if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+            _snprintf_s(out, cap, _TRUNCATE, "%s\\Engine.ini", dir);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+// Puts the [Core.Log] section back, keeping everything else the file holds. Any
+// section of that name already there is dropped first, because the game does
+// not always rewrite the file between runs and two copies of it would be one
+// too many. A failure anywhere here is silent on purpose: the log categories
+// are a diagnostic, and the game still has to start without them.
+static void WriteCoreLog(const char* ini) {
+    char buf[1u << 16];
+    DWORD got = 0;
+
+    HANDLE h = CreateFileA(ini, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                           NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h != INVALID_HANDLE_VALUE) {
+        if (!ReadFile(h, buf, sizeof(buf) - 1, &got, NULL)) got = 0;
+        CloseHandle(h);
+    }
+    buf[got] = 0;
+
+    // Drop an existing [Core.Log], from its header to the next section header.
+    char* start = strstr(buf, "[Core.Log]");
+    if (start) {
+        char* end = start;
+        while ((end = strchr(end, '\n')) != NULL) {
+            end++;
+            if (*end == '[') break;
+        }
+        if (end) memmove(start, end, strlen(end) + 1);
+        else *start = 0;
+        got = (DWORD) strlen(buf);
+    }
+
+    // Keep the section on a line of its own whatever the file ended with.
+    const char* lead = (got && buf[got - 1] != '\n') ? "\r\n" : "";
+
+    h = CreateFileA(ini, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                    FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) return;
+
+    DWORD written;
+    if (got) WriteFile(h, buf, got, &written, NULL);
+    if (*lead) WriteFile(h, lead, (DWORD) strlen(lead), &written, NULL);
+    WriteFile(h, CORE_LOG_SECTION, (DWORD) strlen(CORE_LOG_SECTION), &written, NULL);
+    CloseHandle(h);
+}
+
 // The control probe of the run: an allow-listed argument that needs no quoting,
 // so that a run which produces this file has proved the command line is read.
 // %LOCALAPPDATA% is where the engine already keeps its own logs, and it is the
@@ -207,12 +281,16 @@ int main(void) {
     char* slash = strrchr(dir, '\\');
     if (slash) *slash = 0;
 
+    // Before the game starts, so it is there for the one moment it is read.
+    char ini[PATHBUF];
+    if (ProjectEngineIni(rel, ini, sizeof(ini))) WriteCoreLog(ini);
+
     char abslog[PATHBUF];
     if (!AbsLogArg(abslog, sizeof(abslog))) abslog[0] = 0;
 
     char cmd[PATHBUF * 3];
     const char* args = OwnArgs();
-    _snprintf_s(cmd, sizeof(cmd), _TRUNCATE, "\"%s\"" LOG_INI "%s%s%s%s",
+    _snprintf_s(cmd, sizeof(cmd), _TRUNCATE, "\"%s\"%s%s%s%s",
                 exe, *abslog ? " " : "", abslog, *args ? " " : "", args);
 
     STARTUPINFOA si = { 0 };
