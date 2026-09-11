@@ -685,8 +685,8 @@ static HMODULE g_hOrig = NULL;
 // actually loaded. A stale DLL left in a game folder by an older installer is
 // otherwise indistinguishable from a hook that never fired. Keep it in step
 // with SETUP_VERSION in installer\setup.c.
-#define PROXY_VERSION "t129"
-#define PROXY_BUILD   "test 12, 2026-09-11"
+#define PROXY_VERSION "t139"
+#define PROXY_BUILD   "test 13, 2026-09-11"
 
 // -------- EOS Structs ------------------------
 
@@ -972,8 +972,26 @@ extern __declspec(dllexport) void* EOS_Platform_GetAntiCheatClientInterface(void
 
 // ---- sessions
 
+// What one join saw, counted rather than inferred from how many lines it left.
+// A join that ends having been sent nothing is the whole finding here, and an
+// absence of log lines cannot say that on its own: these used to be one budget
+// for the life of the process, so the first join of a session spent it and every
+// join after it looked silent whether or not it was. They are reset per join now,
+// and EndSession reports the count whatever it is.
+static long g_acMessages = 0;     // every message this join was handed
+static long g_acChanges  = 0;     // how many of them differed from the one before
+static int  g_acBudget   = 0;     // how many more may be written out in full
+static unsigned char g_acLast[24];
+static uint32_t g_acLastLen = 0;
+
+#define ANTICHEAT_LOG_BUDGET 8
+
 extern __declspec(dllexport) int32_t EOS_AntiCheatClient_BeginSession(void* Handle, const void* Options) {
     if (IS_STANDIN(Handle)) {
+        g_acMessages = 0;
+        g_acChanges  = 0;
+        g_acBudget   = ANTICHEAT_LOG_BUDGET;
+        g_acLastLen  = 0;
         LogText("EOS_AntiCheatClient_BeginSession | stand-in, reporting success");
         return EOS_RESULT_SUCCESS;
     }
@@ -993,7 +1011,8 @@ extern __declspec(dllexport) int32_t EOS_AntiCheatClient_BeginSession(void* Hand
 
 extern __declspec(dllexport) int32_t EOS_AntiCheatClient_EndSession(void* Handle, const void* Options) {
     if (IS_STANDIN(Handle)) {
-        LogText("EOS_AntiCheatClient_EndSession | stand-in");
+        LogText("EOS_AntiCheatClient_EndSession | stand-in, %ld message(s) from the server this join, %ld of them different from the one before",
+                g_acMessages, g_acChanges);
         return EOS_RESULT_SUCCESS;
     }
 
@@ -1075,11 +1094,25 @@ static void AntiCheat_LogMessage(const char* what, const void* data, uint32_t le
 extern __declspec(dllexport) int32_t EOS_AntiCheatClient_ReceiveMessageFromServer(void* Handle, const void* Options) {
     if (IS_STANDIN(Handle)) {
         const EOS_AntiCheatClient_ReceiveMessageFromServerOptions* opts = Options;
-        static int budget = 8;
-        if (budget > 0 && opts && opts->Data) {
-            budget--;
-            AntiCheat_LogMessage("EOS_AntiCheatClient_ReceiveMessageFromServer",
-                                 opts->Data, opts->DataLengthBytes);
+        if (opts && opts->Data) {
+            g_acMessages++;
+
+            // A challenge repeated unchanged says nothing the first copy did not,
+            // so only a message that differs from the one before it is written out.
+            uint32_t n = opts->DataLengthBytes;
+            uint32_t keep = n < sizeof(g_acLast) ? n : (uint32_t) sizeof(g_acLast);
+            int same = (n == g_acLastLen) &&
+                       memcmp(g_acLast, opts->Data, keep) == 0;
+            if (!same) {
+                g_acChanges++;
+                memcpy(g_acLast, opts->Data, keep);
+                g_acLastLen = n;
+                if (g_acBudget > 0) {
+                    g_acBudget--;
+                    AntiCheat_LogMessage("EOS_AntiCheatClient_ReceiveMessageFromServer",
+                                         opts->Data, n);
+                }
+            }
         }
         return EOS_RESULT_SUCCESS;
     }

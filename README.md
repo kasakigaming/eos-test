@@ -353,6 +353,33 @@ That rewritten file is worth reading on its own account. What the game leaves in
 connection attempt. Unreal's stateless handshake did run every time, which is the last thing the
 game admits to before the silence.
 
+### One that worked
+
+A join to a community server at `185.45.149.28` went all the way through:
+
+```
+EOS_Sessions_JoinSession | ResultCode 0
+EOS_AntiCheatClient_BeginSession | stand-in, reporting success
+LogGlobalStatus: UEngine::LoadMap Load map complete /Game/TheIsle/Maps/Game/Gateway/Gateway
+LogGlobalStatus: UPendingNetGame::TravelCompleted Pending net game travel completed
+   ... three and a half minutes in the server, then left ...
+LogExit: Name:GameNetDriver Def:GameNetDriver RedpointEOSNetDriver_2147415074 shut down
+```
+
+Two details separate that from every failed attempt. The map that loads is `Gateway`, the game's
+own map, where a failed join never leaves `TitleMap`. And what shuts down at the end is the
+`GameNetDriver` after a browse back to `TitleMap` with no `?closed` on it, which is what leaving a
+server looks like; a failed join shuts down a `PendingNetDriver` and browses to `TitleMap?closed`.
+
+So the wall is the server's setting, exactly as the section above says, and it is not only a server
+you run yourself that can be on the right side of it. Some community servers already are.
+
+What this log cannot say is whether that server sent an anti-cheat challenge at all. The proxy wrote
+out the first eight messages of the *process*, and a failed join two minutes earlier had already
+spent all eight, so the successful join would have looked silent either way. That is a hole in the
+evidence rather than a finding, and the budget is per join now, with the count reported at
+`EndSession` whatever it is. A join that ends having been sent nothing will say so in those words.
+
 **That is the honest limit of this whole approach, and it is not a bug to be fixed.** Everything
 before it works: login, the server browser, the matchmaker, the session lookup, the join, the net
 driver, the connection itself. Forging the last step is precisely the thing anti-cheat exists to
