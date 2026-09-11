@@ -40,10 +40,25 @@ SLSCONF  RCDATA "slssteam-config.yaml"
 // on a machine where EAC cannot run, so the driver gave up before building.
 // The proxy now stands in for the interface itself and answers every call made
 // against it. Servers running the server half still refuse this.
+// t89 - the stand-in registers the reply callback and never fires it. The
+// bytes the server sends are logged instead, which is what proved the challenge
+// carries a per-session value and no canned answer could ever have worked.
+// t99 - the proxy logs the game's own command line, so -LogCmds is measured
+// arriving rather than assumed. It arrives whole and raises nothing.
+// t109 - -abslog, same allow list and no spaces in its value, works every time.
+// So the command line is read and -LogCmds alone is lost.
+// t119 - the spaceless -ini: form of the same setting does nothing either.
+// t129 - one old session shows a [Core.Log] section being read and obeyed, so
+// the launcher writes that section immediately before starting the game, which
+// is the one moment it is read.
+// t139 - a join to a community server went all the way through: Gateway loaded,
+// travel completed, three and a half minutes in, then left. The wall is the
+// server's own setting. Message counting is per join now, so the next one can
+// say whether that server sent a challenge at all.
 // SETUP_VERSION in setup.c prints the same thing at runtime.
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     1,10,0,0
-PRODUCTVERSION  1,10,0,0
+FILEVERSION     1,15,0,0
+PRODUCTVERSION  1,15,0,0
 FILEOS          VOS_NT_WINDOWS32
 FILETYPE        VFT_APP
 BEGIN
@@ -52,7 +67,7 @@ BEGIN
         BLOCK "040904B0"
         BEGIN
             VALUE "FileDescription", "EOS Proxy Setup"
-            VALUE "FileVersion",     "1.10.0.0"
+            VALUE "FileVersion",     "1.15.0.0"
             VALUE "InternalName",    "eos-proxy-setup"
             VALUE "OriginalFilename","eos-proxy-setup.exe"
             VALUE "ProductName",     "EOS Proxy"
